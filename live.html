@@ -257,14 +257,20 @@
 </head>
 <body>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <div id="root"></div>
 
 <script>
-const STORAGE_KEY = 'fiveAlive_state';
-let viewEvent = null;
+const SUPABASE_URL = 'https://cwmcofpgzhhqbfmapkci.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3bWNvZnBnemhocWJmbWFwa2NpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTQxMTQsImV4cCI6MjA4OTI3MDExNH0.Kd1fD8eyHJKAJShiqSy08MTgdpsn60YEOvJlJ3-y8mo';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-function getState() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); }
+let viewEvent = null;
+let currentState = null;
+
+function getLocalState() {
+  try { return JSON.parse(localStorage.getItem('fiveAlive_state')); }
   catch(e) { return null; }
 }
 
@@ -409,9 +415,8 @@ function renderEvent(ev, state) {
   return html;
 }
 
-function render() {
+function render(state) {
   const root = document.getElementById('root');
-  const state = getState();
 
   if (!state) {
     root.innerHTML = `
@@ -481,11 +486,44 @@ function render() {
 
 function setEvent(ev) {
   viewEvent = ev;
-  render();
+  render(currentState);
 }
 
-render();
-setInterval(render, 3000);
+async function init() {
+  // 1. Try Supabase for initial state (cross-device)
+  try {
+    const { data } = await sb.from('live_state').select('state').eq('id', 1).single();
+    if (data?.state) {
+      currentState = data.state;
+      render(currentState);
+    }
+  } catch(e) {}
+
+  // 2. Fall back to localStorage if no Supabase data (same-device use)
+  if (!currentState) {
+    currentState = getLocalState();
+    render(currentState);
+  }
+
+  // 3. Subscribe to realtime updates
+  sb.channel('live_state_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'live_state' }, payload => {
+      if (payload.new?.state) {
+        currentState = payload.new.state;
+        render(currentState);
+      }
+    })
+    .subscribe();
+
+  // 4. Poll localStorage every 3s as fallback for same-device use
+  setInterval(() => {
+    if (currentState) return; // already have Supabase state
+    const local = getLocalState();
+    if (local) { currentState = local; render(currentState); }
+  }, 3000);
+}
+
+init();
 </script>
 </body>
 </html>

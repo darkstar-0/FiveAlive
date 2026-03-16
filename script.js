@@ -1,4 +1,25 @@
 // ════════════════════════════════════════
+//  SUPABASE — live view sync
+// ════════════════════════════════════════
+const SUPABASE_URL = 'https://cwmcofpgzhhqbfmapkci.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3bWNvZnBnemhocWJmbWFwa2NpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTQxMTQsImV4cCI6MjA4OTI3MDExNH0.Kd1fD8eyHJKAJShiqSy08MTgdpsn60YEOvJlJ3-y8mo';
+const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY) ?? null;
+
+async function pushLiveState() {
+  if (!sb) return;
+  const stateStr = localStorage.getItem('fiveAlive_state');
+  if (!stateStr) return;
+  const state = JSON.parse(stateStr);
+  const hasComp = Object.values(state.events||{}).some(ev => ev.phase === 'competition' || ev.phase === 'results');
+  if (!hasComp) return;
+  try {
+    await sb.from('live_state').upsert({ id: 1, state, updated_at: new Date().toISOString() });
+  } catch(e) {
+    console.warn('Live sync error:', e);
+  }
+}
+
+// ════════════════════════════════════════
 //  EMBEDDED ATHLETE DATA (loaded from pdf-data.js)
 // ════════════════════════════════════════
 // PDF_DATA is now loaded from pdf-data.js and is empty by default
@@ -1402,6 +1423,7 @@ function saveState(){
     };
   }
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  pushLiveState();
 }
 
 function loadState(){
