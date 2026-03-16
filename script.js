@@ -1458,6 +1458,26 @@ function clearStoredData(){
   location.reload();
 }
 
+function loadTestData(){
+  const data=PDF_DATA_TEST;
+  document.getElementById('meetName').value=data.meet;
+  document.getElementById('meetDate').value=data.date;
+  EVENTS.girls.athletes=data.girls.map((a,i)=>({id:i,num:a.num,name:a.name,school:a.school,startH:'',checkedInForComp:false,notCompeting:false,checkedOut:false,withdrawn:false,eliminated:false,bestH:null,attempts:{}}));
+  EVENTS.boys.athletes=data.boys.map((a,i)=>({id:i,num:a.num,name:a.name,school:a.school,startH:'',checkedInForComp:false,notCompeting:false,checkedOut:false,withdrawn:false,eliminated:false,bestH:null,attempts:{}}));
+  EVENTS.girls.phase='setup'; EVENTS.boys.phase='setup';
+  updateEventBadges();
+  syncAthleteTableFromState();
+  document.getElementById('eventTabs').style.display='flex';
+  document.getElementById('tabGirls').style.display='flex';
+  document.getElementById('tabBoys').style.display='flex';
+  switchEvent('girls');
+  const res=document.getElementById('importResult');
+  res.style.display='block';
+  updateImportResultMessage();
+  saveState();
+  toast('Demo data loaded ✓');
+}
+
 function updateImportResultMessage(){
   const meetName=document.getElementById('meetName').value;
   const girlsCount=EVENTS.girls.athletes.length;
