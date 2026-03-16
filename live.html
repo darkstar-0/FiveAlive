@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FiveAlive – Live</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #141414;
+      --surface: #1e1e1e;
+      --s2:      #2a2a2a;
+      --border:  #333;
+      --text:    #f0f0f0;
+      --dim:     #aaa;
+      --muted:   #666;
+      --accent:  #c8f000;   /* yellow-green */
+      --cyan:    #00e5ff;   /* current jumper */
+      --purple:  #b47cff;
+      --rose:    #ff7eb4;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── header ── */
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .top-left { display: flex; flex-direction: column; gap: 2px; }
+    .meet-name { font-size: 17px; font-weight: 700; }
+    .meet-date { font-size: 13px; color: var(--dim); }
+    .live-pill {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--dim);
+    }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:.3; }
+    }
+
+    /* ── event tabs ── */
+    .tabs {
+      display: flex; gap: 8px;
+      padding: 10px 20px 0;
+    }
+    .tab {
+      padding: 7px 18px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: transparent;
+      color: var(--dim);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .tab.active {
+      background: var(--s2);
+      color: var(--text);
+      border-color: #555;
+    }
+
+    /* ── main content ── */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 0 20px 20px;
+      max-width: 700px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── current height ── */
+    .height-block {
+      text-align: center;
+      padding: 28px 0 20px;
+    }
+    .height-lbl {
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 8px;
+    }
+    .height-val {
+      font-size: clamp(52px, 12vw, 88px);
+      font-weight: 800;
+      letter-spacing: -.02em;
+      line-height: 1;
+      color: var(--accent);
+    }
+    .height-alt {
+      font-size: 18px;
+      color: var(--dim);
+      margin-top: 6px;
+    }
+
+    /* ── now card ── */
+    .now-card {
+      background: var(--surface);
+      border: 1px solid var(--cyan);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 0 20px rgba(0,229,255,.07);
+    }
+    .now-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      color: var(--cyan);
+      min-width: 54px;
+      text-align: center;
+    }
+    .now-info { flex: 1; min-width: 0; }
+    .now-name {
+      font-size: clamp(20px, 5vw, 30px);
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .now-school {
+      font-size: 14px;
+      color: var(--dim);
+      margin-top: 2px;
+    }
+    .now-atts { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── queue rows ── */
+    .queue { display: flex; flex-direction: column; gap: 4px; }
+    .q-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .q-lbl {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      min-width: 42px;
+      text-align: center;
+      padding: 3px 6px;
+      border-radius: 6px;
+    }
+    .lbl-up   { background: rgba(200,240,0,.15);  color: var(--accent); }
+    .lbl-deck { background: rgba(200,240,0,.15);  color: var(--accent); }
+    .lbl-hole { background: rgba(180,124,255,.15); color: var(--purple); }
+    .lbl-hold { background: rgba(255,126,180,.15); color: var(--rose); }
+    .lbl-num  { background: var(--s2); color: var(--dim); }
+    .q-name { flex: 1; font-size: 16px; font-weight: 600; }
+    .q-school { font-size: 13px; color: var(--dim); }
+    .q-atts { display: flex; gap: 4px; flex-shrink: 0; }
+
+    /* ── attempt badges ── */
+    .att {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .att-o { background: rgba(76,175,80,.2); color: #4caf50; }
+    .att-x { background: rgba(255,68,68,.2); color: #ff4444; }
+    .att-p { background: var(--s2); color: var(--muted); }
+    .att-empty { background: transparent; border: 2px solid var(--border); }
+
+    /* ── now card attempt row ── */
+    .now-att-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .now-att-label { font-size: 12px; color: var(--dim); }
+    .now-att-slots { display: flex; gap: 5px; }
+
+    /* ── footer ── */
+    .foot {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--dim);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .foot-stat strong { color: var(--text); }
+
+    /* ── empty / waiting ── */
+    .empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 14px;
+      padding: 40px 24px;
+    }
+    .empty .logo { font-size: 44px; font-weight: 800; color: var(--accent); letter-spacing: -.04em; }
+    .empty p { color: var(--dim); font-size: 15px; max-width: 320px; }
+
+    /* ── waitlist divider ── */
+    .waitlist-divider {
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 4px 4px;
+    }
+
+    /* ── ended banner ── */
+    .ended-banner {
+      background: rgba(200,240,0,.06);
+      border: 1px solid rgba(200,240,0,.3);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: var(--accent);
+      text-align: center;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script>
+const STORAGE_KEY = 'fiveAlive_state';
+let viewEvent = null;
+
+function getState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); }
+  catch(e) { return null; }
+}
+
+// Heights are stored as display strings already ("1.55 m" or "5'2\"")
+function heightAlt(h) {
+  if (!h || h === '—') return '';
+  if (h.endsWith(' m')) {
+    // metric → imperial
+    const totalIn = Math.round(parseFloat(h) * 39.3701);
+    return Math.floor(totalIn / 12) + "'" + (totalIn % 12) + '"';
+  }
+  const m = h.match(/(\d+)'(\d+)"/);
+  if (m) return (( parseInt(m[1]) * 12 + parseInt(m[2]) ) * 0.0254).toFixed(2) + ' m';
+  return '';
+}
+
+function attBadges(attempts) {
+  return (attempts || []).map(a => {
+    if (a === 'O') return '<span class="att att-o">O</span>';
+    if (a === 'X') return '<span class="att att-x">X</span>';
+    return '<span class="att att-p">P</span>';
+  }).join('');
+}
+
+function labelClass(label) {
+  if (label === 'UP')   return 'lbl-up';
+  if (label === 'DECK') return 'lbl-deck';
+  if (label === 'HOLE') return 'lbl-hole';
+  if (label === 'HOLD') return 'lbl-hold';
+  return 'lbl-num';
+}
+
+function renderEvent(ev, state) {
+  const unit = state.unitSystem || 'metric';
+  const athletes = ev.athletes || [];
+  const getA = id => athletes.find(a => a.id === id);
+  const curH = ev.heights ? ev.heights[ev.hIdx] : null;
+  const hasCur = ev.cur !== -1;
+  const curAthlete = hasCur ? getA(ev.rotation[ev.cur]) : null;
+
+  // Build queue: rotation (minus current if jumping) then waitlist
+  const rotQueue = ev.rotation
+    ? ev.rotation.filter((_, i) => !(hasCur && i === ev.cur))
+    : [];
+  const waitQueue = ev.waitList || [];
+
+  const qLabels = hasCur
+    ? ['DECK', 'HOLE', 'HOLD', '5TH', '6TH', '7TH']
+    : ['UP', 'DECK', 'HOLE', 'HOLD', '5TH', '6TH', '7TH'];
+
+  // Counts
+  const remaining = athletes.filter(a => a.checkedInForComp && !a.eliminated && !a.withdrawn).length;
+  const checkedOut = athletes.filter(a => a.checkedOut && !a.eliminated && !a.withdrawn).length;
+
+  let html = '';
+
+  // Ended banner
+  if (ev.ended || ev.phase === 'results') {
+    html += `<div class="ended-banner">Competition Complete</div>`;
+  }
+
+  // Current height — already a display string ("1.55 m" or "5'2\"")
+  if (curH) {
+    const alt = heightAlt(curH);
+    html += `
+      <div class="height-block">
+        <div class="height-lbl">Current Height</div>
+        <div class="height-val">${curH}</div>
+        ${alt ? `<div class="height-alt">${alt}</div>` : ''}
+      </div>`;
+  }
+
+  // Now card
+  if (curAthlete) {
+    const curAtts = curAthlete.attempts[curH] || [];
+    const attemptNum = curAtts.length + 1;
+    const slotsHtml = [0, 1, 2].map(i => {
+      if (i < curAtts.length) {
+        const a = curAtts[i];
+        if (a === 'O') return '<span class="att att-o">O</span>';
+        if (a === 'X') return '<span class="att att-x">X</span>';
+        return '<span class="att att-p">P</span>';
+      }
+      return '<span class="att att-empty"></span>';
+    }).join('');
+    html += `
+      <div class="now-card">
+        <div class="now-badge">▶ NOW</div>
+        <div class="now-info">
+          <div class="now-name">${curAthlete.name}${curAthlete.num ? `<span style="font-size:16px;font-weight:500;color:var(--dim);margin-left:10px">#${curAthlete.num}</span>` : ''}</div>
+          <div class="now-school">${curAthlete.school}</div>
+          <div class="now-att-row">
+            <span class="now-att-label">Attempt ${attemptNum} of 3</span>
+            <span class="now-att-slots">${slotsHtml}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Queue
+  html += '<div class="queue">';
+
+  rotQueue.forEach((id, i) => {
+    const a = getA(id);
+    if (!a) return;
+    const label = qLabels[i] || String(i + (hasCur ? 2 : 1));
+    html += `
+      <div class="q-row">
+        <span class="q-lbl ${labelClass(label)}">${label}</span>
+        ${a.num ? `<span style="font-size:12px;color:var(--muted);min-width:28px;text-align:right">#${a.num}</span>` : ''}
+        <span class="q-name">${a.name}</span>
+        <span class="q-school">${a.school}</span>
+        <span class="q-atts">${attBadges(a.attempts[curH])}</span>
+      </div>`;
+  });
+
+  if (waitQueue.length > 0) {
+    html += `<div class="waitlist-divider">Waiting to enter</div>`;
+    waitQueue.forEach(id => {
+      const a = getA(id);
+      if (!a) return;
+      html += `
+        <div class="q-row">
+          <span class="q-lbl lbl-num">WAIT</span>
+          ${a.num ? `<span style="font-size:12px;color:var(--muted);min-width:28px;text-align:right">#${a.num}</span>` : ''}
+          <span class="q-name">${a.name}</span>
+          <span class="q-school">${a.school}</span>
+          <span class="q-atts"></span>
+        </div>`;
+    });
+  }
+
+  html += '</div>';
+
+  // Footer stats
+  html += `
+    <div class="foot">
+      <span class="foot-stat"><strong>${remaining}</strong> athlete${remaining !== 1 ? 's' : ''} remaining</span>
+      ${checkedOut ? `<span class="foot-stat"><strong>${checkedOut}</strong> checked out</span>` : ''}
+    </div>`;
+
+  return html;
+}
+
+function render() {
+  const root = document.getElementById('root');
+  const state = getState();
+
+  if (!state) {
+    root.innerHTML = `
+      <div class="empty">
+        <div class="logo">5alive</div>
+        <p>Waiting for meet data…</p>
+        <p>Open FiveAlive on the official's device to get started.</p>
+      </div>`;
+    return;
+  }
+
+  const { meetName, meetDate, events = {} } = state;
+
+  // Events currently in competition or results
+  const liveEvents = ['girls', 'boys'].filter(k =>
+    events[k] && (events[k].phase === 'competition' || events[k].phase === 'results')
+  );
+
+  if (liveEvents.length === 0) {
+    const formattedDate = meetDate
+      ? new Date(meetDate + 'T12:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
+      : '';
+    root.innerHTML = `
+      <div class="empty">
+        <div class="logo">5alive</div>
+        ${meetName ? `<p style="font-size:20px;font-weight:700;color:var(--text)">${meetName}</p>` : ''}
+        ${formattedDate ? `<p>${formattedDate}</p>` : ''}
+        <p>Competition has not started yet.</p>
+      </div>`;
+    return;
+  }
+
+  // Auto-select event if needed
+  if (!viewEvent || !liveEvents.includes(viewEvent)) viewEvent = liveEvents[0];
+
+  const formattedDate = meetDate
+    ? new Date(meetDate + 'T12:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
+    : '';
+
+  // Header
+  let html = `
+    <div class="top">
+      <div class="top-left">
+        <div class="meet-name">${meetName || 'High Jump'}</div>
+        ${formattedDate ? `<div class="meet-date">${formattedDate}</div>` : ''}
+      </div>
+      <div class="live-pill"><div class="live-dot"></div>Live</div>
+    </div>`;
+
+  // Tabs (only if both events are live)
+  if (liveEvents.length > 1) {
+    html += `<div class="tabs">`;
+    liveEvents.forEach(k => {
+      html += `<button class="tab${k === viewEvent ? ' active' : ''}" onclick="setEvent('${k}')">
+        ${k === 'girls' ? "Girls' HJ" : "Boys' HJ"}
+      </button>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="content">`;
+  html += renderEvent(events[viewEvent], state);
+  html += `</div>`;
+
+  root.innerHTML = html;
+}
+
+function setEvent(ev) {
+  viewEvent = ev;
+  render();
+}
+
+render();
+setInterval(render, 3000);
+</script>
+</body>
+</html>

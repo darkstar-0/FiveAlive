@@ -1,0 +1,18 @@
+{
+  "name": "fivealive",
+  "version": "1.0.0",
+  "description": "Five Alive High Jump Competition Management App",
+  "main": "script.js",
+  "scripts": {
+    "test": "cypress run",
+    "test:open": "cypress open",
+    "test:headless": "cypress run --headless"
+  },
+  "keywords": ["five alive", "high jump", "competition"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "cypress": "^15.12.0"
+  }
+}
