@@ -435,6 +435,11 @@ async function parsePDF(file) {
       }
     }
 
+    console.log('[PDF] allItems total:', allItems.length);
+    console.log('[PDF] allItems sample:', allItems.slice(0,5).map(i=>({str:i.str, page:i._page, x:Math.round(i.transform[4]), y:Math.round(i.transform[5])})));
+    // Find any items that mention High, Jump, Girls, Boys
+    const keyItems = allItems.filter(i => /high|jump|girls?|boys?/i.test(i.str));
+    console.log('[PDF] key items (High/Jump/Girls/Boys):', keyItems.map(i=>({str:i.str, page:i._page, x:Math.round(i.transform[4]), y:Math.round(i.transform[5])})));
     const parsedData = extractMeetData(allItems);
     console.log('[PDF] parsedData:', parsedData);
 
