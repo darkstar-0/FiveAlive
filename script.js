@@ -425,10 +425,12 @@ async function parsePDF(file) {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
 
+    console.log('[PDF] numPages:', pdf.numPages);
     let allItems = [];
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
+      if (i <= 2) console.log(`[PDF] page ${i} raw items:`, textContent.items.length);
       for (const item of textContent.items) {
         item._page = i;
         allItems.push(item);
