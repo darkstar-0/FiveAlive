@@ -408,6 +408,7 @@ function parseSection(lines, genderRe, pageNum) {
     }
     const a = parseAthleteLine(l);
     if (a) athletes.push(a);
+    else if (/^\d/.test(l)) console.log(`[PDF] parseAthleteLine FAILED on: "${l}"`);
   }
   console.log(`[PDF] parseSection page=${pageNum} gender=${genderRe} found ${athletes.length} athletes`);
   return athletes;
