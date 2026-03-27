@@ -329,23 +329,35 @@ function extractMeetData(rawItems) {
     const pageMaxX = Math.max(...pageItems.map(i => i.x + (i.w || 0)));
     const pageMid  = pageMaxX / 2;
 
+    const processHalf = (colItems, label) => {
+      const lines = makeLines(colItems);
+      const colText = lines.join(' ');
+      console.log(`[PDF] page=${pageNum} ${label} items=${colItems.length}`, lines.slice(0, 6));
+      if (/girls?/i.test(colText)) result.girls.push(...parseSection(lines, /girls?/i, pageNum));
+      if (/boys?/i.test(colText))  result.boys.push(...parseSection(lines, /boys?/i, pageNum));
+    };
+
     const processedCols = new Set();
     for (const hjRow of hjRows) {
       const colKey = Math.round(hjRow.colX / 200);
       if (processedCols.has(colKey)) continue;
       processedCols.add(colKey);
+      const isRight = hjRow.colX > pageMid;
+      processHalf(
+        isRight ? pageItems.filter(i => i.x > pageMid - 20)
+                : pageItems.filter(i => i.x <= pageMid + 20),
+        `HJ x≈${Math.round(hjRow.colX)} pageMid=${Math.round(pageMid)}`
+      );
+    }
 
-      // Take the half of the page that contains this HJ column
-      const colItems = hjRow.colX > pageMid
-        ? pageItems.filter(i => i.x > pageMid - 20)
-        : pageItems.filter(i => i.x <= pageMid + 20);
-
-      const lines = makeLines(colItems);
-      const colText = lines.join(' ');
-      console.log(`[PDF] page=${pageNum} HJ x≈${Math.round(hjRow.colX)} pageMid=${Math.round(pageMid)} items=${colItems.length}`, lines.slice(0, 6));
-
-      if (/girls?/i.test(colText)) result.girls.push(...parseSection(lines, /girls?/i, pageNum));
-      if (/boys?/i.test(colText))  result.boys.push(...parseSection(lines, /boys?/i, pageNum));
+    // If only one column half was processed, also try the other half —
+    // the opposite gender's HJ header may not have formed a clean row
+    const foundLeft  = [...processedCols].some(k => k === 0);
+    const foundRight = [...processedCols].some(k => k > 0);
+    if (foundLeft && !foundRight) {
+      processHalf(pageItems.filter(i => i.x > pageMid - 20), `right-fallback pageMid=${Math.round(pageMid)}`);
+    } else if (foundRight && !foundLeft) {
+      processHalf(pageItems.filter(i => i.x <= pageMid + 20), `left-fallback pageMid=${Math.round(pageMid)}`);
     }
   }
 
