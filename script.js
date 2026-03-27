@@ -299,25 +299,46 @@ function extractMeetData(rawItems) {
     pageMap.get(i.page).push(i);
   });
 
-  // For each page, find "High Jump" header items and process each x-column independently.
-  // This prevents athletes from other events (e.g. Discus in the left column) from bleeding
-  // into the High Jump results when two events share a page side-by-side.
+  // For each page, find rows where the reconstructed text contains "High Jump"
+  // (handles PDFs where "High" and "Jump" are separate text items) then process
+  // each x-column independently to avoid bleeding from adjacent events.
   for (const [pageNum, pageItems] of pageMap) {
-    const hjItems = pageItems.filter(i => /high\s*jump/i.test(i.str));
-    if (!hjItems.length) continue;
+    // Build row map by snapped y
+    const rowMap = new Map();
+    pageItems.forEach(i => {
+      const y = Math.round(i.y / 3) * 3;
+      if (!rowMap.has(y)) rowMap.set(y, []);
+      rowMap.get(y).push(i);
+    });
+
+    // Find rows whose combined text contains "High Jump"
+    const hjRows = [];
+    for (const [y, rowItems] of rowMap) {
+      const rowText = rowItems.sort((a, b) => a.x - b.x).map(i => i.str).join(' ');
+      if (/high\s*jump/i.test(rowText)) {
+        hjRows.push({ y, colX: Math.min(...rowItems.map(i => i.x)) });
+      }
+    }
+    if (!hjRows.length) continue;
+
+    // Use page x-extent midpoint to separate left/right columns
+    const pageMaxX = Math.max(...pageItems.map(i => i.x + (i.w || 0)));
+    const pageMid  = pageMaxX / 2;
 
     const processedCols = new Set();
-    for (const hjItem of hjItems) {
-      // Group by 200pt buckets — items in the same column share the same key
-      const colKey = Math.round(hjItem.x / 200);
+    for (const hjRow of hjRows) {
+      const colKey = Math.round(hjRow.colX / 200);
       if (processedCols.has(colKey)) continue;
       processedCols.add(colKey);
 
-      // Filter to items within ±200pt x of this HJ header (isolates the HJ column)
-      const colItems = pageItems.filter(i => Math.abs(i.x - hjItem.x) < 200);
+      // Take the half of the page that contains this HJ column
+      const colItems = hjRow.colX > pageMid
+        ? pageItems.filter(i => i.x > pageMid - 20)
+        : pageItems.filter(i => i.x <= pageMid + 20);
+
       const lines = makeLines(colItems);
       const colText = lines.join(' ');
-      console.log(`[PDF] page=${pageNum} HJ col x≈${Math.round(hjItem.x)} items=${colItems.length}`, lines.slice(0, 8));
+      console.log(`[PDF] page=${pageNum} HJ x≈${Math.round(hjRow.colX)} pageMid=${Math.round(pageMid)} items=${colItems.length}`, lines.slice(0, 6));
 
       if (/girls?/i.test(colText)) result.girls.push(...parseSection(lines, /girls?/i, pageNum));
       if (/boys?/i.test(colText))  result.boys.push(...parseSection(lines, /boys?/i, pageNum));
@@ -374,7 +395,9 @@ function parseAthleteLine(line) {
   // Must start with a sequence number
   const seqMatch = stripped.match(/^(\d{1,3})\s+(.+)$/);
   if (!seqMatch) return null;
-  const rest = seqMatch[2].trim();
+  // Strip grade year (9-12) that appears between athlete name and school in some PDF formats
+  // e.g. "O'Hara, Sasha  10  LEGEND" → "O'Hara, Sasha  LEGEND"
+  const rest = seqMatch[2].trim().replace(/\s+(9|10|11|12)(?=\s+[A-Z])/, '');
   // School is the last all-uppercase token(s) at the end (e.g. "SIMLA", "WOODLAND PARK")
   // Name precedes it in mixed case with possible comma (Last, First format)
   const schoolMatch = rest.match(/^(.+?)\s+([A-Z][A-Z0-9 &.'*\-]{1,50})$/);
