@@ -299,13 +299,29 @@ function extractMeetData(rawItems) {
     pageMap.get(i.page).push(i);
   });
 
-  // Accumulate athletes across all pages — HJ events may span multiple pages
-  for (const [, pageItems] of pageMap) {
-    const lines = makeLines(pageItems);
-    if (!lines.some(l => /high\s*jump/i.test(l))) continue;
-    const pageText = lines.join(' ');
-    if (/girls?/i.test(pageText)) result.girls.push(...parseSection(lines, /girls?/i));
-    if (/boys?/i.test(pageText))  result.boys.push(...parseSection(lines, /boys?/i));
+  // For each page, find "High Jump" header items and process each x-column independently.
+  // This prevents athletes from other events (e.g. Discus in the left column) from bleeding
+  // into the High Jump results when two events share a page side-by-side.
+  for (const [pageNum, pageItems] of pageMap) {
+    const hjItems = pageItems.filter(i => /high\s*jump/i.test(i.str));
+    if (!hjItems.length) continue;
+
+    const processedCols = new Set();
+    for (const hjItem of hjItems) {
+      // Group by 200pt buckets — items in the same column share the same key
+      const colKey = Math.round(hjItem.x / 200);
+      if (processedCols.has(colKey)) continue;
+      processedCols.add(colKey);
+
+      // Filter to items within ±200pt x of this HJ header (isolates the HJ column)
+      const colItems = pageItems.filter(i => Math.abs(i.x - hjItem.x) < 200);
+      const lines = makeLines(colItems);
+      const colText = lines.join(' ');
+      console.log(`[PDF] page=${pageNum} HJ col x≈${Math.round(hjItem.x)} items=${colItems.length}`, lines.slice(0, 8));
+
+      if (/girls?/i.test(colText)) result.girls.push(...parseSection(lines, /girls?/i, pageNum));
+      if (/boys?/i.test(colText))  result.boys.push(...parseSection(lines, /boys?/i, pageNum));
+    }
   }
 
   // Deduplicate by name+school (bold rendering or repeated headers can cause duplicates)
@@ -317,7 +333,7 @@ function extractMeetData(rawItems) {
 }
 
 // Extract athletes from lines below the "High Jump" section header
-function parseSection(lines, genderRe) {
+function parseSection(lines, genderRe, pageNum) {
   // Prefer a short line with both "High Jump" and gender (avoids garbled index rows)
   let start = lines.findIndex(l => /high\s*jump/i.test(l) && genderRe.test(l) && l.length < 80);
   if (start === -1) start = lines.findIndex(l => /high\s*jump/i.test(l) && genderRe.test(l));
@@ -330,14 +346,19 @@ function parseSection(lines, genderRe) {
     }
   }
   if (start === -1) return [];
+  console.log(`[PDF] parseSection page=${pageNum} gender=${genderRe} start=${start} header="${lines[start]}" next5:`, lines.slice(start+1, start+6));
   const athletes = [];
   for (let i = start + 1; i < lines.length; i++) {
     const l = lines[i];
     // Stop at any event section header: non-athlete line mentioning a track/field event type
-    if (!/^\d/.test(l) && /\b(high\s*jump|relay|hurdle|vault|dash|discus|javelin|triple\s*jump|long\s*jump|shot\s*put)\b/i.test(l)) break;
+    if (!/^\d/.test(l) && /\b(high\s*jump|relay|hurdle|vault|dash|discus|javelin|triple\s*jump|long\s*jump|shot\s*put)\b/i.test(l)) {
+      console.log(`[PDF] parseSection stopped at line ${i}: "${l}"`);
+      break;
+    }
     const a = parseAthleteLine(l);
     if (a) athletes.push(a);
   }
+  console.log(`[PDF] parseSection page=${pageNum} gender=${genderRe} found ${athletes.length} athletes`);
   return athletes;
 }
 
