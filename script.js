@@ -285,8 +285,9 @@ function extractMeetData(rawItems) {
   const maxY = Math.max(...page1.map(i => i.y));
   const headerText = page1.filter(i => i.y > maxY - 120)
     .sort((a, b) => a.x - b.x).map(i => i.str).join(' ');
-  const meetMatch = headerText.match(/([A-Z][A-Za-z ]+?(?:Invitational|Championship|Classic|Relays?|Festival|Open|Invite))/);
-  if (meetMatch) result.meet = meetMatch[1].trim();
+  // Take the longest match to avoid partial matches like "Mar Relays" from "March … Relays"
+  const meetMatches = [...headerText.matchAll(/([A-Z][A-Za-z ]+?(?:Invitational|Championship|Classic|Relays?|Festival|Open|Invite))/g)];
+  if (meetMatches.length) result.meet = meetMatches.map(m => m[1].trim()).reduce((a, b) => b.length > a.length ? b : a);
   const headerNoTimestamp = headerText.replace(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4},?\s+\d{1,2}:\d{2}(\s*[AP]M)?/gi, '');
   const dateRaw = headerNoTimestamp.match(/\b(Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\s+(\d{1,2}),?\s+(\d{4})\b/i) ||
     headerNoTimestamp.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
@@ -403,9 +404,10 @@ function parseAthleteLine(line) {
   if (!line || line.length < 5) return null;
   // Skip section headers, flight labels, venue records
   if (/^(Flight\s|Venue\s|#\d)/i.test(line)) return null;
-  // Strip trailing seed/result height: feet-inches (4-10.00) or metric (1.68m)
+  // Strip trailing seed/result height: "4-10.00", OCR variant "410.00", or metric "1.68m"
   const stripped = line
     .replace(/\s+\d{1,2}-\d{2}\.\d{2}$/, '')
+    .replace(/\s+\d{3,4}\.\d{2}$/, '')
     .replace(/\s+\d+\.\d{2,}m$/i, '')
     .trim();
   // Must start with a sequence number
@@ -413,7 +415,8 @@ function parseAthleteLine(line) {
   if (!seqMatch) return null;
   // Strip grade year (9-12) that appears between athlete name and school in some PDF formats
   // e.g. "O'Hara, Sasha  10  LEGEND" → "O'Hara, Sasha  LEGEND"
-  const rest = seqMatch[2].trim().replace(/\s+(9|10|11|12)(?=\s+[A-Z])/, '');
+  // Strip grade year between name and school — extend beyond 9-12 to catch OCR misreads (e.g. 70, 72, 77)
+  const rest = seqMatch[2].trim().replace(/\s+\d{1,2}(?=\s+[A-Z]{2})/, '');
   // School is the last all-uppercase token(s) at the end (e.g. "SIMLA", "WOODLAND PARK")
   // Name precedes it in mixed case with possible comma (Last, First format)
   const schoolMatch = rest.match(/^(.+?)\s+([A-Z][A-Z0-9 &.'*\-]{1,50})$/);
