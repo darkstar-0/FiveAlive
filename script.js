@@ -486,7 +486,11 @@ async function parsePDF(file) {
     document.getElementById('tabBoys').style.display='flex';
     saveState();
 
-    toast(`✓ PDF imported — ${parsedData.girls.length} Girls, ${parsedData.boys.length} Boys`);
+    if (parsedData.girls.length === 0 && parsedData.boys.length === 0) {
+      toast('⚠ No athletes found — PDF may be scanned. Try converting to text first, or enter athletes manually.');
+    } else {
+      toast(`✓ PDF imported — ${parsedData.girls.length} Girls, ${parsedData.boys.length} Boys`);
+    }
   } catch (err) {
     console.error('PDF parsing error:', err);
     toast('⚠ Could not parse PDF. Using test data if available.');
