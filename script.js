@@ -437,6 +437,7 @@ function handleDrop(e){e.preventDefault();const f=e.dataTransfer.files[0];if(f&&
 function handlePDFUpload(e){const f=e.target.files[0];if(f) parsePDF(f);}
 
 async function parsePDF(file) {
+  if (!window.pdfjsLib) { toast('PDF import unavailable (no internet connection)'); return; }
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
@@ -1302,6 +1303,7 @@ function exportCSV(){
 }
 
 function exportPDF(){
+  if (!window.jspdf) { toast('PDF export unavailable (no internet connection)'); return; }
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
   const PAGE_W=279,MARGIN=12,USABLE=PAGE_W-MARGIN*2;
