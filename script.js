@@ -424,9 +424,11 @@ function parseAthleteLine(line) {
     .replace(/\s+\d{3,4}\.\d{2}$/, '')
     .replace(/\s+\d+\.\d{2,}m$/i, '')
     .trim();
-  // Must start with a sequence number
-  const seqMatch = stripped.match(/^(\d{1,3})\s+(.+)$/);
+  // Must start with a sequence number (digits, or a single letter OCR-misread of a digit e.g. g→9, o→0)
+  const seqMatch = stripped.match(/^(\d{1,3}|[a-z])\s+(.+)$/i);
   if (!seqMatch) return null;
+  // Reject single-letter matches that are actually "o Venue…", "g Flight…", etc.
+  if (isNaN(seqMatch[1]) && /^(venue|flight|meet\b|heat\b|#)/i.test(seqMatch[2].trim())) return null;
   // Strip grade year (9-12) that appears between athlete name and school in some PDF formats
   // e.g. "O'Hara, Sasha  10  LEGEND" → "O'Hara, Sasha  LEGEND"
   // Strip grade year between name and school — extend beyond 9-12 to catch OCR misreads (e.g. 70, 72, 77)
