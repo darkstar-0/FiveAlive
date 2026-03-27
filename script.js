@@ -319,7 +319,11 @@ function extractMeetData(rawItems) {
         hjRows.push({ y, colX: Math.min(...rowItems.map(i => i.x)) });
       }
     }
-    if (!hjRows.length) continue;
+    if (!hjRows.length) {
+      const pageText = [...rowMap.values()].map(r => r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ')).join(' ');
+      if (/boys?|girls?|high|jump/i.test(pageText)) console.log(`[PDF] page=${pageNum} hjRows=0 but has keywords — sample:`, pageText.slice(0,200));
+      continue;
+    }
 
     // Use page x-extent midpoint to separate left/right columns
     const pageMaxX = Math.max(...pageItems.map(i => i.x + (i.w || 0)));
