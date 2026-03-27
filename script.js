@@ -249,7 +249,7 @@ function makeLines(items) {
   if (!items.length) return [];
   const rowMap = new Map();
   items.forEach(item => {
-    const y = Math.round(item.y / 6) * 6;  // 6px snap tolerates OCR y-jitter within a line
+    const y = Math.round(item.y / 8) * 8;  // 8px snap tolerates OCR y-jitter within a line
     if (!rowMap.has(y)) rowMap.set(y, []);
     rowMap.get(y).push(item);
   });
@@ -283,13 +283,24 @@ function extractMeetData(rawItems) {
   // Meet name + date from top ~120pt of page 1
   const page1 = items.filter(i => i.page === 1);
   const maxY = Math.max(...page1.map(i => i.y));
-  const headerText = page1.filter(i => i.y > maxY - 120)
-    .sort((a, b) => a.x - b.x).map(i => i.str).join(' ');
-  // Filter out month-name false matches (e.g. "Mar Relays" from "Fri, Mar 27 … Relays"), then take longest
-  const meetMatches = [...headerText.matchAll(/([A-Z][A-Za-z ]+?(?:Invitational|Championship|Classic|Relays?|Festival|Open|Invite))/g)];
-  const meetCandidates = meetMatches.map(m => m[1].trim())
-    .filter(s => !/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(s));
-  if (meetCandidates.length) result.meet = meetCandidates.reduce((a, b) => b.length > a.length ? b : a);
+  const topItems = page1.filter(i => i.y > maxY - 120);
+  // Build proper lines (handles multi-item titles) then normalize non-breaking spaces
+  const headerLines = makeLines(topItems).map(l => l.replace(/\u00a0/g, ' '));
+  const headerText = headerLines.join(' ');
+  // Search line-by-line — skip lines starting with timestamps, digits, or non-name words
+  const skipLine = /^(\d|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Meet\b|Venue\b|AM\b|PM\b)/i;
+  for (const line of headerLines) {
+    if (skipLine.test(line.trim())) continue;
+    const m = line.match(/([A-Z][A-Za-z ]+?(?:Invitational|Championship|Classic|Relays?|Festival|Open|Invite))/);
+    if (m) { result.meet = m[1].trim(); break; }
+  }
+  // Fallback: scan full headerText if line-by-line found nothing
+  if (!result.meet) {
+    const meetMatches = [...headerText.matchAll(/([A-Z][A-Za-z ]+?(?:Invitational|Championship|Classic|Relays?|Festival|Open|Invite))/g)];
+    const meetCandidates = meetMatches.map(m => m[1].trim())
+      .filter(s => !/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|PM|AM)\b/i.test(s));
+    if (meetCandidates.length) result.meet = meetCandidates.reduce((a, b) => b.length > a.length ? b : a);
+  }
   const headerNoTimestamp = headerText.replace(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4},?\s+\d{1,2}:\d{2}(\s*[AP]M)?/gi, '');
   const dateRaw = headerNoTimestamp.match(/\b(Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\s+(\d{1,2}),?\s+(\d{4})\b/i) ||
     headerNoTimestamp.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
