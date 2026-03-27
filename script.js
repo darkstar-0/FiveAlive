@@ -249,7 +249,7 @@ function makeLines(items) {
   if (!items.length) return [];
   const rowMap = new Map();
   items.forEach(item => {
-    const y = Math.round(item.y / 3) * 3;
+    const y = Math.round(item.y / 6) * 6;  // 6px snap tolerates OCR y-jitter within a line
     if (!rowMap.has(y)) rowMap.set(y, []);
     rowMap.get(y).push(item);
   });
@@ -285,9 +285,11 @@ function extractMeetData(rawItems) {
   const maxY = Math.max(...page1.map(i => i.y));
   const headerText = page1.filter(i => i.y > maxY - 120)
     .sort((a, b) => a.x - b.x).map(i => i.str).join(' ');
-  // Take the longest match to avoid partial matches like "Mar Relays" from "March … Relays"
+  // Filter out month-name false matches (e.g. "Mar Relays" from "Fri, Mar 27 … Relays"), then take longest
   const meetMatches = [...headerText.matchAll(/([A-Z][A-Za-z ]+?(?:Invitational|Championship|Classic|Relays?|Festival|Open|Invite))/g)];
-  if (meetMatches.length) result.meet = meetMatches.map(m => m[1].trim()).reduce((a, b) => b.length > a.length ? b : a);
+  const meetCandidates = meetMatches.map(m => m[1].trim())
+    .filter(s => !/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(s));
+  if (meetCandidates.length) result.meet = meetCandidates.reduce((a, b) => b.length > a.length ? b : a);
   const headerNoTimestamp = headerText.replace(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4},?\s+\d{1,2}:\d{2}(\s*[AP]M)?/gi, '');
   const dateRaw = headerNoTimestamp.match(/\b(Jan\w*|Feb\w*|Mar\w*|Apr\w*|May|Jun\w*|Jul\w*|Aug\w*|Sep\w*|Oct\w*|Nov\w*|Dec\w*)\s+(\d{1,2}),?\s+(\d{4})\b/i) ||
     headerNoTimestamp.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
