@@ -716,8 +716,10 @@ function renderCheckinGrid() {
     else if(a.checkedInForComp) cls+=' checked-in';
     card.className=cls;
     card.onclick=()=>openCiModal(a.id);
+    const ciStatusCls=a.notCompeting?'out':a.checkedInForComp&&a.checkedOut?'co':a.checkedInForComp?'in':'out';
+    const ciStatusTxt=a.notCompeting?'DNS':a.checkedInForComp&&a.checkedOut?'CO':a.checkedInForComp?'IN':'—';
     card.innerHTML=`
-      <span class="ci-status ${a.notCompeting?'out':a.checkedInForComp?'in':'out'}">${a.notCompeting?'DNS':a.checkedInForComp?'IN':'—'}</span>
+      <span class="ci-status ${ciStatusCls}">${ciStatusTxt}</span>
       <div class="ci-name">${a.name}</div>
       <div class="ci-school">${a.school}</div>
       ${a.num?`<div class="ci-num">#${a.num}</div>`:''}
@@ -733,12 +735,23 @@ function renderCheckinGrid() {
   document.getElementById('ciNoHeight').textContent=noH;
 }
 
+function updateCiActiveToggle() {
+  const tog=document.getElementById('ciActiveToggle');
+  const lbl=document.getElementById('ciActiveLabel');
+  const hint=document.getElementById('ciActiveHint');
+  if(tog.checked){lbl.textContent='Present & Active';hint.textContent='';}
+  else{lbl.textContent='Checked Out';hint.textContent='Athlete will be registered but placed in the Checked Out list.';}
+}
+
 function openCiModal(id) {
   const a=E().athletes.find(x=>x.id===id); if(!a) return;
   ciEditingId=id;
   document.getElementById('ciModalTitle').textContent=a.checkedInForComp?'Edit Check-In':'Check In Athlete';
   document.getElementById('ciModalName').textContent=a.name;
   document.getElementById('ciModalSchool').textContent=a.school;
+  const tog=document.getElementById('ciActiveToggle');
+  tog.checked=!(a.checkedInForComp&&a.checkedOut);
+  updateCiActiveToggle();
   const sel=document.getElementById('ciStartH');
   const heights=E().setupHeights||setupHeights;
   sel.innerHTML='<option value="">— First height —</option>'+
@@ -754,7 +767,10 @@ function ciConfirm() {
   const a=E().athletes.find(x=>x.id===ciEditingId); if(!a) return;
   a.startH=document.getElementById('ciStartH').value;
   a.checkedInForComp=true; a.notCompeting=false;
-  closeCiModal(); renderCheckinGrid(); saveState(); toast(`${a.name} checked in ✓`);
+  const active=document.getElementById('ciActiveToggle').checked;
+  a.checkedOut=!active;
+  closeCiModal(); renderCheckinGrid(); saveState();
+  toast(active?`${a.name} checked in ✓`:`${a.name} checked in (checked out)`);
 }
 
 function ciRemove() {
@@ -837,7 +853,7 @@ function startComp() {
 
   ev.heights=[...heights]; ev.hIdx=0; ev.ended=false; ev.skippedMisses={};
   ev.phase = 'competition';
-  competing.forEach(a=>{a.eliminated=false;a.checkedOut=false;a.bestH=null;a.attempts={};});
+  competing.forEach(a=>{a.eliminated=false;a.bestH=null;a.attempts={};});
 
   buildRotation();
   buildRaiseChips();
