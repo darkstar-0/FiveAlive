@@ -375,8 +375,8 @@ function extractMeetData(rawItems) {
     }
   }
 
-  // Deduplicate by name+school (bold rendering or repeated headers can cause duplicates)
-  const dedup = arr => { const s = new Set(); return arr.filter(a => { const k = `${a.name}|${a.school}`; return s.has(k) ? false : (s.add(k), true); }); };
+  // Deduplicate by name only (OCR variants can produce slightly different school strings for the same athlete)
+  const dedup = arr => { const s = new Set(); return arr.filter(a => { const k = a.name.toLowerCase(); return s.has(k) ? false : (s.add(k), true); }); };
   result.girls = dedup(result.girls);
   result.boys  = dedup(result.boys);
 
@@ -452,6 +452,12 @@ function parseAthleteLine(line) {
       const a = words.slice(0, h).join(' ');
       const b = words.slice(h, 2 * h).join(' ');
       if (a.toLowerCase() === b.toLowerCase() && isValidSchool(a)) return a;
+      // OCR partial match: multi-word schools where first word matches (e.g. "Fairview Hig" vs "Fairview His")
+      if (h >= 2 && isValidSchool(a)) {
+        const aWords = a.split(/\s+/);
+        const bWords = b.split(/\s+/);
+        if (aWords[0].toLowerCase() === bWords[0].toLowerCase()) return a;
+      }
     }
     return null;
   };
@@ -466,13 +472,24 @@ function parseAthleteLine(line) {
     let firstName, schoolWords;
     if (innerComma > 0) {
       // Doubled name: "First LastName, First School School…"
-      const beforeInner = afterComma.slice(0, innerComma);
+      const beforeInner = afterComma.slice(0, innerComma).trim();
       const esc = lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      firstName = beforeInner.replace(new RegExp('\\s+' + esc + '\\s*$', 'i'), '').trim();
       const afterInner = afterComma.slice(innerComma + 1).trim();
-      const escFN = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const cleanAfterInner = afterInner.replace(new RegExp('^' + escFN + '\\s*', 'i'), '').trim();
-      schoolWords = cleanAfterInner.split(/\s+/).filter(Boolean);
+
+      if (new RegExp('^' + esc + '$', 'i').test(beforeInner)) {
+        // beforeInner IS the lastName — e.g. "Johnson, Johnson, Oluwadarasimi Overland Hi…"
+        const afterInnerParts = afterInner.split(/\s+/).filter(Boolean);
+        firstName = afterInnerParts[0];
+        schoolWords = afterInnerParts.slice(1);
+      } else {
+        // Normal doubled name: "First [LastName], First School…"
+        firstName = beforeInner.replace(new RegExp('\\s+' + esc + '\\s*$', 'i'), '').trim();
+        // OCR mismatch fallback: if lastName wasn't found in beforeInner, take first word only
+        if (!firstName || firstName === beforeInner) firstName = beforeInner.split(/\s+/)[0];
+        const escFN = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cleanAfterInner = afterInner.replace(new RegExp('^' + escFN + '\\s*', 'i'), '').trim();
+        schoolWords = cleanAfterInner.split(/\s+/).filter(Boolean);
+      }
     } else {
       // Single comma: "First School…" (school may still be doubled)
       const parts = afterComma.split(/\s+/).filter(Boolean);
@@ -480,11 +497,13 @@ function parseAthleteLine(line) {
       schoolWords = parts.slice(1);
     }
 
+    // Filter non-alpha tokens (OCR-garbled seeds like "I", ".00", "41") before school detection
+    const cleanSchoolWords = schoolWords.filter(w => /^[A-Za-z']+$/.test(w));
     // Try doubled school detection first, then shortest valid school
-    school = findDoubledSchool(schoolWords);
+    school = findDoubledSchool(cleanSchoolWords);
     if (!school) {
-      for (let sc = 1; sc <= Math.min(3, schoolWords.length); sc++) {
-        const candidate = schoolWords.slice(schoolWords.length - sc).join(' ');
+      for (let sc = 1; sc <= Math.min(3, cleanSchoolWords.length); sc++) {
+        const candidate = cleanSchoolWords.slice(cleanSchoolWords.length - sc).join(' ');
         if (isValidSchool(candidate)) { school = candidate; break; }
       }
     }
