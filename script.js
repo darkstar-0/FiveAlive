@@ -748,6 +748,7 @@ function openCiModal(id) {
 }
 
 function closeCiModal(){document.getElementById('ciModal').classList.remove('open');ciEditingId=null;}
+function openEditAthleteCi(){const id=ciEditingId;closeCiModal();openAddAthleteCi(id);}
 
 function ciConfirm() {
   const a=E().athletes.find(x=>x.id===ciEditingId); if(!a) return;
