@@ -1793,6 +1793,61 @@ function switchTab(id){
   document.querySelectorAll('.htab').forEach(t=>{if(t.getAttribute('onclick')===`switchTab('${id}')`)t.classList.add('active');});
 }
 
+// ═══════════════════════════════════════════════════════
+//  FEEDBACK — Add to script.js (anywhere near the Help section)
+// ═══════════════════════════════════════════════════════
+
+function openFeedback() {
+  document.getElementById('feedbackCategory').value = 'Bug Report';
+  document.getElementById('feedbackMessage').value = '';
+  document.getElementById('feedbackStatus').textContent = '';
+  document.getElementById('feedbackSubmitBtn').disabled = false;
+  document.getElementById('feedbackModal').classList.add('open');
+}
+
+function closeFeedback() {
+  document.getElementById('feedbackModal').classList.remove('open');
+}
+
+async function submitFeedback() {
+  const category = document.getElementById('feedbackCategory').value;
+  const message = document.getElementById('feedbackMessage').value.trim();
+  const statusEl = document.getElementById('feedbackStatus');
+  const btn = document.getElementById('feedbackSubmitBtn');
+
+  if (!message) {
+    statusEl.textContent = 'Please enter a message.';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Sending…';
+  statusEl.style.color = 'var(--dim)';
+
+  try {
+    if (!sb) throw new Error('No Supabase connection');
+
+    const { error } = await sb.from('feedback').insert({
+      category,
+      message,
+      session_code: currentSessionCode || null,
+      user_agent: navigator.userAgent || null
+    });
+
+    if (error) throw error;
+
+    statusEl.textContent = '';
+    closeFeedback();
+    toast('Thanks for your feedback! ✓');
+  } catch (e) {
+    console.error('Feedback submit error:', e);
+    statusEl.textContent = 'Failed to send — please try again.';
+    statusEl.style.color = 'var(--danger)';
+    btn.disabled = false;
+  }
+}
+
 let _toastTimer=null;
 let _undoState=null;
 function toast(msg,undoFn){

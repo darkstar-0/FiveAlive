@@ -536,6 +536,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="clearStoredData()">🗑 Clear All Data</button>
+      <button class="btn btn-outline" onclick="closeHelp();openFeedback()">💬 Submit Feedback</button>
       <button class="btn btn-accent" onclick="closeHelp()">Got it</button>
     </div>
   </div>
@@ -579,6 +580,36 @@
       <button class="btn btn-outline" onclick="resetSessionCode()" style="font-size:11px">↻ New Code</button>
       <button class="btn btn-outline" onclick="printQR()">🖨 Print QR</button>
       <button class="btn btn-accent" onclick="closeShareMeet()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- FEEDBACK MODAL -->
+<div class="modal-overlay" id="feedbackModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">💬 Submit Feedback</div>
+    <div class="modal-body" style="margin-bottom:12px">
+      Found a bug? Have an idea? Let us know — all feedback helps improve Five Alive.
+    </div>
+ 
+    <label class="field-label">Category</label>
+    <select id="feedbackCategory" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;margin-bottom:12px;cursor:pointer">
+      <option value="Bug Report">🐛 Bug Report</option>
+      <option value="Feature Request">💡 Feature Request</option>
+      <option value="General Feedback">📝 General Feedback</option>
+      <option value="Question">❓ Question</option>
+    </select>
+ 
+    <label class="field-label">Message</label>
+    <textarea id="feedbackMessage" rows="5"
+              placeholder="Describe the issue or suggestion…"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;resize:vertical;line-height:1.5;box-sizing:border-box"></textarea>
+ 
+    <div id="feedbackStatus" style="font-size:12px;min-height:18px;margin-top:6px"></div>
+ 
+    <div class="modal-actions" style="margin-top:12px">
+      <button class="btn btn-outline" onclick="closeFeedback()">Cancel</button>
+      <button class="btn btn-accent" id="feedbackSubmitBtn" onclick="submitFeedback()">Send Feedback</button>
     </div>
   </div>
 </div>
