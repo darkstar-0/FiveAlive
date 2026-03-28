@@ -274,7 +274,7 @@ function extractMeetData(rawItems) {
     .filter(i => i.str && i.str.trim())
     .map(i => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width || 0, page: i._page || 1 }))
     .filter(i => {
-      const key = `${i.page}|${i.str}|${Math.round(i.x/4)}|${Math.round(i.y/4)}`;
+      const key = `${i.page}|${i.str}|${Math.round(i.x/4)}|${Math.round(i.y/8)*8}`;
       if (seen.has(key)) return false;
       seen.add(key); return true;
     });
@@ -418,8 +418,10 @@ function parseAthleteLine(line) {
   if (!line || line.length < 5) return null;
   // Skip section headers, flight labels, venue records
   if (/^(Flight\s|Venue\s|#\d)/i.test(line)) return null;
-  // Strip trailing seed/result height: "4-10.00", OCR variant "410.00", or metric "1.68m"
+  // Strip trailing blanks (result write-in lines in programs), then seed/result marks
   const stripped = line
+    .replace(/\s+_{3,}\s*$/, '')           // trailing underscores like "__________"
+    .replace(/\s+(NH|NT|ND)\s*$/i, '')     // no-mark flags (No Height, No Time, No Distance)
     .replace(/\s+\d{1,2}-\d{2}\.\d{2}$/, '')
     .replace(/\s+\d{3,4}\.\d{2}$/, '')
     .replace(/\s+\d+\.\d{2,}m$/i, '')
@@ -433,21 +435,41 @@ function parseAthleteLine(line) {
   // e.g. "O'Hara, Sasha  10  LEGEND" → "O'Hara, Sasha  LEGEND"
   // Strip grade year between name and school — extend beyond 9-12 to catch OCR misreads (e.g. 70, 72, 77)
   const rest = seqMatch[2].trim().replace(/\s+\d{1,2}(?=\s+[A-Z]{2})/, '');
-  // School is the last all-uppercase token(s) at the end (e.g. "SIMLA", "WOODLAND PARK")
-  // Name precedes it in mixed case with possible comma (Last, First format)
-  const schoolMatch = rest.match(/^(.+?)\s+([A-Z][A-Z0-9 &.'*\-]{1,50})$/);
-  if (!schoolMatch) return null;
-  let name = schoolMatch[1].trim();
-  const school = schoolMatch[2].trim();
-  // School must be all-caps (no lowercase letters)
-  if (/[a-z]/.test(school)) return null;
-  // School must have at least 2 uppercase letters (not just a digit or punctuation)
-  if (!/[A-Z]{2}/.test(school)) return null;
-  // Convert "Last, First" → "First Last"
-  if (name.includes(',')) {
-    const comma = name.indexOf(',');
-    name = name.slice(comma + 1).trim() + ' ' + name.slice(0, comma).trim();
+
+  // Helper: validate a school candidate — each word starts uppercase, ≥2 uppercase letters total, no comma
+  const isValidSchool = s =>
+    !s.includes(',') &&
+    s.split(/\s+/).every(w => /^[A-Z]/.test(w)) &&
+    (s.match(/[A-Z]/g) || []).length >= 2;
+
+  let name, school;
+  const commaIdx = rest.indexOf(',');
+  if (commaIdx > 0) {
+    // "Last, First School..." format — use comma to anchor name/school split
+    const lastName = rest.slice(0, commaIdx).trim();
+    const afterComma = rest.slice(commaIdx + 1).trim();
+    const parts = afterComma.split(/\s+/).filter(Boolean);
+    // Try taking 3, 2, then 1 words from the end as the school (longest valid school wins)
+    let found = false;
+    for (let sc = Math.min(3, parts.length - 1); sc >= 1; sc--) {
+      const candidate = parts.slice(parts.length - sc).join(' ');
+      if (isValidSchool(candidate)) {
+        school = candidate;
+        name = parts.slice(0, parts.length - sc).join(' ') + ' ' + lastName;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return null;
+  } else {
+    // No comma: "First Last SCHOOL" or all-caps format — fall back to regex
+    const schoolMatch = rest.match(/^(.+?)\s+([A-Z][A-Za-z0-9 &.'*\-]{1,50})$/);
+    if (!schoolMatch) return null;
+    name = schoolMatch[1].trim();
+    school = schoolMatch[2].trim();
+    if (!isValidSchool(school)) return null;
   }
+
   if (name.length > 3 && name.length < 60 && school.length >= 2) return { num: null, name, school };
   return null;
 }
