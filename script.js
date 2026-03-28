@@ -1679,7 +1679,10 @@ function exportPDF(){
   const gender=activeEvent==='girls'?'Girls':'Boys';
   const ev=E(), hs=ev.heights.slice(0,ev.hIdx+1), r=ranked();
   doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(`${gender.toUpperCase()} HIGH JUMP RESULTS`,MARGIN,16);
-  doc.set
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text(`${mn}${md?' \u2014 '+md:''}`,MARGIN,24);
+  const fixedCols=[{l:'Place',w:10},{l:'Name',w:42},{l:'School',w:30},{l:'Start',w:16},{l:'Best',w:16}];
+  const trailCols=[{l:'Miss',w:14}];
+  const fixedW=fixedCols.reduce((s,c)=>s+c.w,0)+trailCols.reduce((s,c)=>s+c.w,0);
   const hColW=hs.length>0?Math.max(9,Math.floor((USABLE-fixedW)/hs.length)):12;
   const allCols=[...fixedCols,...hs.map(h=>({l:h,w:hColW})),...trailCols];
   const cw=allCols.map(c=>c.w);
