@@ -26,6 +26,7 @@
     <button class="btn btn-outline" onclick="safeShowSetup()">↩ Setup</button>
     <button class="btn btn-outline" id="hdrCheckin" onclick="showCheckin()" style="display:none">✓ Check-In</button>
     <button class="btn btn-outline" id="hdrScoresheet" onclick="showResults()" style="display:none">📋 Scoresheet</button>
+    <button class="btn btn-blue" id="hdrShare" onclick="showShareMeet()" style="display:none">📡 Share Live</button>
     <button class="btn btn-danger" id="hdrEndComp" onclick="confirmEndComp()" style="display:none">⏹ End</button>
   </div>
 </header>
@@ -181,7 +182,7 @@
       <div class="sb-hdr">
         <div class="sb-title">Live Scoreboard</div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-outline" style="font-size:11px;padding:5px 9px" onclick="window.open('live.html','_blank')">📺 Public View</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 9px" onclick="window.open(getLiveURL(),'_blank')">📺 Public View</button>
           <button class="btn btn-outline" style="font-size:11px;padding:5px 9px" onclick="showResults()">Full Results →</button>
         </div>
       </div>
@@ -545,6 +546,41 @@
   <div style="font-size:18px;font-weight:600;margin-bottom:10px;">Checked Out Jumpers</div>
   <div id="checkedOutList"></div>
   <button class="btn btn-outline" style="margin-top:12px;width:100%;" onclick="closeCheckedOutModal()">Close</button>
+</div>
+
+<div class="modal-overlay" id="shareMeetModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">📡 Share Live Results</div>
+    <div class="modal-body" style="margin-bottom:8px">
+      Spectators can view this meet's live results by visiting the link below or entering the session code.
+    </div>
+ 
+    <!-- Session Code -->
+    <div style="text-align:center;margin:18px 0">
+      <div style="font-size:11px;font-weight:700;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Session Code</div>
+      <div id="shareCode" style="font-family:'DM Mono',monospace;font-size:36px;font-weight:800;letter-spacing:6px;color:var(--accent2)">------</div>
+    </div>
+ 
+    <!-- Shareable URL -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Live View Link</div>
+      <div style="display:flex;gap:8px">
+        <input id="shareURL" type="text" readonly
+               style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-family:'DM Mono',monospace;font-size:12px"
+               value="">
+        <button class="btn btn-accent" onclick="copyShareURL()" style="flex-shrink:0">Copy</button>
+      </div>
+    </div>
+ 
+    <!-- QR Code area -->
+    <div id="qrCanvas" style="text-align:center;margin:14px 0"></div>
+ 
+    <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-outline" onclick="resetSessionCode()" style="font-size:11px">↻ New Code</button>
+      <button class="btn btn-outline" onclick="printQR()">🖨 Print QR</button>
+      <button class="btn btn-accent" onclick="closeShareMeet()">Done</button>
+    </div>
+  </div>
 </div>
 
 <script src="script.js"></script>

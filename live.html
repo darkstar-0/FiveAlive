@@ -14,8 +14,8 @@
       --text:    #f0f0f0;
       --dim:     #aaa;
       --muted:   #666;
-      --accent:  #c8f000;   /* yellow-green */
-      --cyan:    #00e5ff;   /* current jumper */
+      --accent:  #c8f000;
+      --cyan:    #00e5ff;
       --purple:  #b47cff;
       --rose:    #ff7eb4;
     }
@@ -232,6 +232,61 @@
     .empty .logo { font-size: 44px; font-weight: 800; color: var(--accent); letter-spacing: -.04em; }
     .empty p { color: var(--dim); font-size: 15px; max-width: 320px; }
 
+    /* ── join screen ── */
+    .join-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 20px;
+      padding: 40px 24px;
+    }
+    .join-screen .logo { font-size: 52px; font-weight: 800; color: var(--accent); letter-spacing: -.04em; }
+    .join-screen p { color: var(--dim); font-size: 15px; max-width: 360px; }
+    .code-input {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      color: var(--text);
+      font-size: 32px;
+      font-weight: 800;
+      font-family: monospace;
+      letter-spacing: 8px;
+      text-align: center;
+      padding: 16px 20px;
+      border-radius: 14px;
+      width: 280px;
+      text-transform: uppercase;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .code-input:focus { border-color: var(--accent); }
+    .code-input::placeholder {
+      color: var(--muted);
+      letter-spacing: 4px;
+      font-size: 18px;
+      font-weight: 400;
+    }
+    .join-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 14px 40px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter .15s;
+    }
+    .join-btn:hover { filter: brightness(1.1); }
+    .join-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .join-error {
+      color: #ff5252;
+      font-size: 13px;
+      min-height: 20px;
+    }
+
     /* ── waitlist divider ── */
     .waitlist-divider {
       font-size: 11px;
@@ -253,6 +308,14 @@
       text-align: center;
       font-weight: 600;
     }
+
+    /* ── session badge ── */
+    .session-badge {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: monospace;
+      letter-spacing: 1px;
+    }
   </style>
 </head>
 <body>
@@ -268,17 +331,17 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let viewEvent = null;
 let currentState = null;
+let meetCode = null;  // The session code from URL or user input
 
-function getLocalState() {
-  try { return JSON.parse(localStorage.getItem('fiveAlive_state')); }
-  catch(e) { return null; }
+// ── Parse session code from URL ──
+function getMeetCodeFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('meet')?.toUpperCase()?.trim() || null;
 }
 
-// Heights are stored as display strings already ("1.55 m" or "5'2\"")
 function heightAlt(h) {
   if (!h || h === '—') return '';
   if (h.endsWith(' m')) {
-    // metric → imperial
     const totalIn = Math.round(parseFloat(h) * 39.3701);
     return Math.floor(totalIn / 12) + "'" + (totalIn % 12) + '"';
   }
@@ -311,7 +374,6 @@ function renderEvent(ev, state) {
   const hasCur = ev.cur !== -1;
   const curAthlete = hasCur ? getA(ev.rotation[ev.cur]) : null;
 
-  // Build queue: rotation (minus current if jumping) then waitlist
   const rotQueue = ev.rotation
     ? ev.rotation.filter((_, i) => !(hasCur && i === ev.cur))
     : [];
@@ -321,18 +383,15 @@ function renderEvent(ev, state) {
     ? ['DECK', 'HOLE', 'HOLD', '5TH', '6TH', '7TH']
     : ['UP', 'DECK', 'HOLE', 'HOLD', '5TH', '6TH', '7TH'];
 
-  // Counts
   const remaining = athletes.filter(a => a.checkedInForComp && !a.eliminated && !a.withdrawn).length;
   const checkedOut = athletes.filter(a => a.checkedOut && !a.eliminated && !a.withdrawn).length;
 
   let html = '';
 
-  // Ended banner
   if (ev.ended || ev.phase === 'results') {
     html += `<div class="ended-banner">Competition Complete</div>`;
   }
 
-  // Current height — already a display string ("1.55 m" or "5'2\"")
   if (curH) {
     const alt = heightAlt(curH);
     html += `
@@ -343,7 +402,6 @@ function renderEvent(ev, state) {
       </div>`;
   }
 
-  // Now card
   if (curAthlete) {
     const curAtts = curAthlete.attempts[curH] || [];
     const attemptNum = curAtts.length + 1;
@@ -370,7 +428,6 @@ function renderEvent(ev, state) {
       </div>`;
   }
 
-  // Queue
   html += '<div class="queue">';
 
   rotQueue.forEach((id, i) => {
@@ -405,7 +462,6 @@ function renderEvent(ev, state) {
 
   html += '</div>';
 
-  // Footer stats
   html += `
     <div class="foot">
       <span class="foot-stat"><strong>${remaining}</strong> athlete${remaining !== 1 ? 's' : ''} remaining</span>
@@ -423,14 +479,13 @@ function render(state) {
       <div class="empty">
         <div class="logo">5alive</div>
         <p>Waiting for meet data…</p>
-        <p>Open FiveAlive on the official's device to get started.</p>
+        <p style="font-size:12px;color:var(--muted)">Session: ${meetCode || '—'}</p>
       </div>`;
     return;
   }
 
   const { meetName, meetDate, events = {} } = state;
 
-  // Events currently in competition or results
   const liveEvents = ['girls', 'boys'].filter(k =>
     events[k] && (events[k].phase === 'competition' || events[k].phase === 'results')
   );
@@ -445,28 +500,29 @@ function render(state) {
         ${meetName ? `<p style="font-size:20px;font-weight:700;color:var(--text)">${meetName}</p>` : ''}
         ${formattedDate ? `<p>${formattedDate}</p>` : ''}
         <p>Competition has not started yet.</p>
+        <span class="session-badge">${meetCode}</span>
       </div>`;
     return;
   }
 
-  // Auto-select event if needed
   if (!viewEvent || !liveEvents.includes(viewEvent)) viewEvent = liveEvents[0];
 
   const formattedDate = meetDate
     ? new Date(meetDate + 'T12:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
     : '';
 
-  // Header
   let html = `
     <div class="top">
       <div class="top-left">
         <div class="meet-name">${meetName || 'High Jump'}</div>
         ${formattedDate ? `<div class="meet-date">${formattedDate}</div>` : ''}
       </div>
-      <div class="live-pill"><div class="live-dot"></div>Live</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="session-badge">${meetCode}</span>
+        <div class="live-pill"><div class="live-dot"></div>Live</div>
+      </div>
     </div>`;
 
-  // Tabs (only if both events are live)
   if (liveEvents.length > 1) {
     html += `<div class="tabs">`;
     liveEvents.forEach(k => {
@@ -484,43 +540,104 @@ function render(state) {
   root.innerHTML = html;
 }
 
+function renderJoinScreen(errorMsg) {
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="join-screen">
+      <div class="logo">5alive</div>
+      <p>Enter the meet code to view live results</p>
+      <input class="code-input" id="codeInput" type="text" maxlength="6"
+             placeholder="ABC123" autocomplete="off" autofocus
+             oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+             onkeydown="if(event.key==='Enter')joinMeet()">
+      <button class="join-btn" onclick="joinMeet()">View Live Results</button>
+      <div class="join-error" id="joinError">${errorMsg || ''}</div>
+      <p style="font-size:12px;color:var(--muted);margin-top:16px">
+        Get the code from the meet official or scan the QR poster
+      </p>
+    </div>`;
+  setTimeout(() => document.getElementById('codeInput')?.focus(), 100);
+}
+
 function setEvent(ev) {
   viewEvent = ev;
   render(currentState);
 }
 
-async function init() {
-  // 1. Try Supabase for initial state (cross-device)
-  try {
-    const { data } = await sb.from('live_state').select('state').eq('id', 1).single();
-    if (data?.state) {
-      currentState = data.state;
-      render(currentState);
-    }
-  } catch(e) {}
+async function joinMeet() {
+  const input = document.getElementById('codeInput');
+  const code = input?.value?.trim()?.toUpperCase();
+  if (!code || code.length < 4) {
+    document.getElementById('joinError').textContent = 'Enter a valid meet code';
+    return;
+  }
+  // Update URL without reload
+  const url = new URL(window.location.href);
+  url.searchParams.set('meet', code);
+  window.history.replaceState({}, '', url);
+  meetCode = code;
+  await connectToMeet(code);
+}
 
-  // 2. Fall back to localStorage if no Supabase data (same-device use)
-  if (!currentState) {
-    currentState = getLocalState();
-    render(currentState);
+let realtimeChannel = null;
+
+async function connectToMeet(code) {
+  meetCode = code;
+  currentState = null;
+  render(null); // show "waiting" state
+
+  // Unsubscribe from any previous channel
+  if (realtimeChannel) {
+    sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
   }
 
-  // 3. Subscribe to realtime updates
-  sb.channel('live_state_changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'live_state' }, payload => {
+  // 1. Fetch initial state
+  try {
+    const { data, error } = await sb.from('live_state')
+      .select('state')
+      .eq('session_code', code)
+      .single();
+
+    if (error || !data?.state) {
+      // No meet found — show error on join screen
+      renderJoinScreen('Meet not found. Check the code and try again.');
+      return;
+    }
+    currentState = data.state;
+    render(currentState);
+  } catch(e) {
+    renderJoinScreen('Could not connect. Try again.');
+    return;
+  }
+
+  // 2. Subscribe to realtime updates filtered by session_code
+  realtimeChannel = sb.channel(`meet-${code}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'live_state',
+      filter: `session_code=eq.${code}`
+    }, payload => {
       if (payload.new?.state) {
         currentState = payload.new.state;
         render(currentState);
       }
     })
     .subscribe();
+}
 
-  // 4. Poll localStorage every 3s as fallback for same-device use
-  setInterval(() => {
-    if (currentState) return; // already have Supabase state
-    const local = getLocalState();
-    if (local) { currentState = local; render(currentState); }
-  }, 3000);
+async function init() {
+  // Check URL for meet code
+  const urlCode = getMeetCodeFromURL();
+
+  if (urlCode) {
+    // We have a code — connect directly
+    await connectToMeet(urlCode);
+  } else {
+    // No code — show join screen
+    renderJoinScreen();
+  }
 }
 
 init();

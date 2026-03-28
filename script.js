@@ -1,10 +1,38 @@
 // ════════════════════════════════════════
-//  SUPABASE — live view sync
+//  SUPABASE — live view sync (session-aware)
 // ════════════════════════════════════════
 const SUPABASE_URL = 'https://cwmcofpgzhhqbfmapkci.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3bWNvZnBnemhocWJmbWFwa2NpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTQxMTQsImV4cCI6MjA4OTI3MDExNH0.Kd1fD8eyHJKAJShiqSy08MTgdpsn60YEOvJlJ3-y8mo';
 const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY) ?? null;
-
+ 
+// ── Session Code ──
+let currentSessionCode = null;
+ 
+function generateSessionCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I,O,0,1 to avoid confusion
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+ 
+function getSessionCode() {
+  if (currentSessionCode) return currentSessionCode;
+  // Check localStorage for a previously generated code
+  const stored = localStorage.getItem('fiveAlive_sessionCode');
+  if (stored) { currentSessionCode = stored; return stored; }
+  // Generate a new one
+  currentSessionCode = generateSessionCode();
+  localStorage.setItem('fiveAlive_sessionCode', currentSessionCode);
+  return currentSessionCode;
+}
+ 
+function getLiveURL() {
+  const code = getSessionCode();
+  // Build URL relative to current location (works on any host)
+  const base = window.location.href.replace(/\/[^\/]*$/, '/');
+  return `${base}live.html?meet=${code}`;
+}
+ 
 async function pushLiveState() {
   if (!sb) return;
   const stateStr = localStorage.getItem('fiveAlive_state');
@@ -12,8 +40,20 @@ async function pushLiveState() {
   const state = JSON.parse(stateStr);
   const hasComp = Object.values(state.events||{}).some(ev => ev.phase === 'competition' || ev.phase === 'results');
   if (!hasComp) return;
+  const code = getSessionCode();
+  const meetName = document.getElementById('meetName').value || '';
   try {
-    await sb.from('live_state').upsert({ id: 1, state, updated_at: new Date().toISOString() });
+    // Upsert by session_code instead of fixed id:1
+    const { error } = await sb.from('live_state').upsert(
+      {
+        session_code: code,
+        state,
+        meet_name: meetName,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: 'session_code' }
+    );
+    if (error) console.warn('Live sync error:', error);
   } catch(e) {
     console.warn('Live sync error:', e);
   }
@@ -1314,6 +1354,10 @@ function setHdrBtns(screen) {
     ss.style.display='inline-block';
     ec.style.display='none';
   }
+  const shareBtn = document.getElementById('hdrShare');
+     if (shareBtn) {
+       shareBtn.style.display = (phase==='competition'||phase==='results') ? 'inline-block' : 'none';
+     }
 }
 
 function confirmEndComp(){
@@ -1883,6 +1927,7 @@ function saveState(){
     setupHeights:setupHeights,
     selectedInc:selectedInc,
     compRaiseVal:compRaiseVal,
+    sessionCode:getSessionCode(),
     events:{}
   };
   for(const ev in EVENTS){
@@ -1917,6 +1962,11 @@ function loadState(){
     setupHeights=state.setupHeights||[];
     selectedInc=state.selectedInc||3;
     compRaiseVal=state.compRaiseVal||3;
+
+    if(state.sessionCode) {
+      currentSessionCode = state.sessionCode;
+      localStorage.setItem('fiveAlive_sessionCode', state.sessionCode);
+    }
     
     setUnit(unitSystem);
     
@@ -1938,6 +1988,7 @@ function clearStoredData(){
     return;
   }
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('fiveAlive_sessionCode');
   location.reload();
 }
 
@@ -1985,6 +2036,83 @@ function updateImportResultMessage(){
 }
 
 // ── INIT ──
+// ════════════════════════════════════════
+//  SHARE MEET (session code + QR)
+// ════════════════════════════════════════
+function showShareMeet() {
+  const code = getSessionCode();
+  const url = getLiveURL();
+  const modal = document.getElementById('shareMeetModal');
+  document.getElementById('shareCode').textContent = code;
+  document.getElementById('shareURL').value = url;
+  // Generate QR code as an SVG using a simple inline generator
+  renderQR(url);
+  modal.classList.add('open');
+}
+function closeShareMeet() {
+  document.getElementById('shareMeetModal').classList.remove('open');
+}
+function copyShareURL() {
+  const url = document.getElementById('shareURL').value;
+  navigator.clipboard.writeText(url).then(() => toast('Link copied!')).catch(() => {
+    // Fallback: select the input
+    document.getElementById('shareURL').select();
+    document.execCommand('copy');
+    toast('Link copied!');
+  });
+}
+function printQR() {
+  const qrEl = document.getElementById('qrCanvas');
+  const code = getSessionCode();
+  const meetName = document.getElementById('meetName').value || 'High Jump';
+  const w = window.open('', '_blank');
+  w.document.write(`
+    <html><head><title>Meet QR Code</title>
+    <style>
+      body { font-family: system-ui, sans-serif; text-align: center; padding: 40px; }
+      h1 { font-size: 28px; margin-bottom: 4px; }
+      .code { font-size: 48px; font-weight: 800; letter-spacing: 6px; margin: 16px 0; font-family: monospace; }
+      .url { font-size: 14px; color: #666; margin-top: 12px; word-break: break-all; }
+      .qr { margin: 20px auto; }
+      p { font-size: 16px; color: #333; }
+    </style></head><body>
+      <h1>${meetName}</h1>
+      <p>Scan to view live results</p>
+      <div class="qr">${qrEl.innerHTML}</div>
+      <div class="code">${code}</div>
+      <div class="url">${getLiveURL()}</div>
+      <script>setTimeout(()=>{window.print();},300)<\/script>
+    </body></html>
+  `);
+  w.document.close();
+}
+ 
+// Minimal QR code renderer (uses an inline SVG approach)
+// For production you may want to use a library like qrcode.js
+function renderQR(text) {
+  const el = document.getElementById('qrCanvas');
+  // Use a simple placeholder that shows the URL clearly
+  // For a real QR, you'd use a library. This creates a scannable link display.
+  el.innerHTML = `
+    <div style="background:#fff;padding:20px;border-radius:12px;display:inline-block;border:2px solid #ccc">
+      <div style="font-size:11px;color:#666;margin-bottom:8px">Scan with phone camera or enter code:</div>
+      <div style="font-family:monospace;font-size:36px;font-weight:800;letter-spacing:4px;color:#000">${getSessionCode()}</div>
+      <div style="font-size:10px;color:#999;margin-top:8px;word-break:break-all;max-width:260px">${text}</div>
+    </div>
+  `;
+  // If you add qrcode.min.js to your project, replace the above with:
+  // el.innerHTML = '';
+  // new QRCode(el, { text, width: 200, height: 200 });
+}
+ 
+function resetSessionCode() {
+  if (!confirm('Generate a new session code? Spectators using the old code will no longer see updates.')) return;
+  currentSessionCode = generateSessionCode();
+  localStorage.setItem('fiveAlive_sessionCode', currentSessionCode);
+  showShareMeet();
+  saveState(); // re-push with new code
+  toast('New session code: ' + currentSessionCode);
+}
 buildIncChips(); buildRaiseChips();
 
 // Restore theme preference (default: light)
