@@ -236,7 +236,10 @@
 <div class="modal-overlay" id="ciModal">
   <div class="modal ci-modal">
     <div class="modal-title" id="ciModalTitle">Check In Athlete</div>
-    <div id="ciModalName" style="font-size:16px;font-weight:700;margin-bottom:4px"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <div id="ciModalName" style="font-size:16px;font-weight:700"></div>
+      <button onclick="closeCiModal();openAddAthleteCi(ciEditingId)" style="background:none;border:none;cursor:pointer;color:var(--dim);font-size:14px;padding:2px 4px;line-height:1" title="Edit name/school">✏</button>
+    </div>
     <div id="ciModalSchool" style="font-size:12px;color:var(--dim);font-family:'DM Mono',monospace;margin-bottom:14px"></div>
     <label class="field-label">Starting Height</label>
     <select id="ciStartH"></select>
@@ -251,7 +254,7 @@
 <!-- ADD ATHLETE FROM CHECK-IN -->
 <div class="modal-overlay" id="addAthleteCiModal">
   <div class="modal ci-modal">
-    <div class="modal-title">Add Athlete</div>
+    <div class="modal-title" id="addAthleteCiTitle">Add Athlete</div>
     <label class="field-label">Name</label>
     <input id="aciName" class="ci-search" style="margin-bottom:10px" placeholder="Athlete name" oninput="" autocomplete="off">
     <label class="field-label">School</label>
@@ -260,7 +263,7 @@
     <select id="aciStartH"></select>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeAddAthleteCi()">Cancel</button>
-      <button class="btn btn-accent" onclick="doAddAthleteCi()">+ Add &amp; Check In</button>
+      <button class="btn btn-accent" id="aciSubmitBtn" onclick="doAddAthleteCi()">+ Add &amp; Check In</button>
     </div>
   </div>
 </div>

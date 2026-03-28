@@ -375,8 +375,8 @@ function extractMeetData(rawItems) {
     }
   }
 
-  // Deduplicate by name only (OCR variants can produce slightly different school strings for the same athlete)
-  const dedup = arr => { const s = new Set(); return arr.filter(a => { const k = a.name.toLowerCase(); return s.has(k) ? false : (s.add(k), true); }); };
+  // Deduplicate by normalized name (strip hyphens/spaces so "Sirlona-Holmes" == "SirlonaHolmes")
+  const dedup = arr => { const s = new Set(); return arr.filter(a => { const k = a.name.toLowerCase().replace(/[-\s]/g, ''); return s.has(k) ? false : (s.add(k), true); }); };
   result.girls = dedup(result.girls);
   result.boys  = dedup(result.boys);
 
@@ -771,21 +771,40 @@ function checkOutAllCi() {
   renderCheckinGrid(); saveState(); toast('All unchecked');
 }
 
-function openAddAthleteCi() {
+let aciEditingId = null;
+function openAddAthleteCi(editId) {
+  aciEditingId = editId || null;
   const heights=E().setupHeights||setupHeights;
   const sel=document.getElementById('aciStartH');
   sel.innerHTML='<option value="">— First height —</option>'+heights.map(h=>`<option value="${h}">${h}</option>`).join('');
-  document.getElementById('aciName').value='';
-  document.getElementById('aciSchool').value='';
+  if (aciEditingId) {
+    const a=E().athletes.find(x=>x.id===aciEditingId);
+    document.getElementById('addAthleteCiTitle').textContent='Edit Athlete';
+    document.getElementById('aciSubmitBtn').textContent='Save';
+    document.getElementById('aciName').value=a.name;
+    document.getElementById('aciSchool').value=a.school;
+    if (a.startH) sel.value=a.startH;
+  } else {
+    document.getElementById('addAthleteCiTitle').textContent='Add Athlete';
+    document.getElementById('aciSubmitBtn').textContent='+ Add & Check In';
+    document.getElementById('aciName').value='';
+    document.getElementById('aciSchool').value='';
+  }
   document.getElementById('addAthleteCiModal').classList.add('open');
   setTimeout(()=>document.getElementById('aciName').focus(),50);
 }
-function closeAddAthleteCi(){document.getElementById('addAthleteCiModal').classList.remove('open');}
+function closeAddAthleteCi(){document.getElementById('addAthleteCiModal').classList.remove('open');aciEditingId=null;}
 function doAddAthleteCi() {
   const name=document.getElementById('aciName').value.trim();
   if(!name){toast('Enter athlete name');return;}
   const school=document.getElementById('aciSchool').value.trim().toUpperCase();
   const startH=document.getElementById('aciStartH').value;
+  if (aciEditingId) {
+    const a=E().athletes.find(x=>x.id===aciEditingId);
+    a.name=name; a.school=school; if(startH) a.startH=startH;
+    closeAddAthleteCi(); renderCheckinGrid(); saveState(); toast(`${name} updated ✓`);
+    return;
+  }
   const id=Date.now();
   const num=Math.max(0,...E().athletes.map(a=>a.num||0))+1;
   E().athletes.push({id,num,name,school,startH,checkedInForComp:true,notCompeting:false,checkedOut:false,withdrawn:false,eliminated:false,bestH:null,attempts:{}});
