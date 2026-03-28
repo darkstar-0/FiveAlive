@@ -418,23 +418,26 @@ function parseAthleteLine(line) {
   if (!line || line.length < 5) return null;
   // Skip section headers, flight labels, venue records
   if (/^(Flight\s|Venue\s|#\d)/i.test(line)) return null;
-  // Strip trailing blanks (result write-in lines in programs), then seed/result marks
+  // Strip trailing blanks and anything after them (adjacent-column bleed), then seed/result marks
   const stripped = line
-    .replace(/\s+_{3,}\s*$/, '')           // trailing underscores like "__________"
+    .replace(/\s+_{3,}.*$/, '')            // underscores and everything after (col bleed, position #s)
     .replace(/\s+(NH|NT|ND)\s*$/i, '')     // no-mark flags (No Height, No Time, No Distance)
-    .replace(/\s+\d{1,2}-\d{2}\.\d{2}$/, '')
-    .replace(/\s+\d{3,4}\.\d{2}$/, '')
-    .replace(/\s+\d+\.\d{2,}m$/i, '')
+    .replace(/\s+\d{1,2}-\d{2}\.\d{2}$/, '')  // height seed e.g. 4-07.00
+    .replace(/\s+\d{3,4}\.\d{2}$/, '')    // OCR height e.g. 407.00 (doubled seed)
+    .replace(/\s+\d{1,2}-\d{2}\.\d{2}$/, '')  // second pass: height after OCR double removed
+    .replace(/\s+\d{1,2}\s*$/, '')         // stray trailing position number (column bleed w/o underscores)
+    .replace(/\s+\d{1,2}-\d{2}\.\d{2}$/, '')  // third pass: height after stray number removed
+    .replace(/\s+\d+\.\d{2,}m$/i, '')     // metric
     .trim();
   // Must start with a sequence number (digits, or a single letter OCR-misread of a digit e.g. g→9, o→0)
   const seqMatch = stripped.match(/^(\d{1,3}|[a-z])\s+(.+)$/i);
   if (!seqMatch) return null;
   // Reject single-letter matches that are actually "o Venue…", "g Flight…", etc.
   if (isNaN(seqMatch[1]) && /^(venue|flight|meet\b|heat\b|#)/i.test(seqMatch[2].trim())) return null;
-  // Strip grade year (9-12) that appears between athlete name and school in some PDF formats
-  // e.g. "O'Hara, Sasha  10  LEGEND" → "O'Hara, Sasha  LEGEND"
-  // Strip grade year between name and school — extend beyond 9-12 to catch OCR misreads (e.g. 70, 72, 77)
-  const rest = seqMatch[2].trim().replace(/\s+\d{1,2}(?=\s+[A-Z]{2})/, '');
+  // Strip grade year and spurious all-caps prefix (e.g. "II" from adjacent column section headers)
+  const rest = seqMatch[2].trim()
+    .replace(/^[A-Z]{1,3}\s+(?=[A-Z][a-z])/, '')  // e.g. "II Berry, Kate…" → "Berry, Kate…"
+    .replace(/\s+\d{1,2}(?=\s+[A-Z]{2})/, '');    // grade year before all-caps school
 
   // Helper: validate a school candidate — each word starts uppercase, ≥2 uppercase letters total, no comma
   const isValidSchool = s =>
@@ -442,25 +445,51 @@ function parseAthleteLine(line) {
     s.split(/\s+/).every(w => /^[A-Z]/.test(w)) &&
     (s.match(/[A-Z]/g) || []).length >= 2;
 
+  // Helper: find doubled school in a word array by matching first-N vs next-N words
+  const findDoubledSchool = words => {
+    const max = Math.min(3, Math.floor(words.length / 2));
+    for (let h = max; h >= 1; h--) {
+      const a = words.slice(0, h).join(' ');
+      const b = words.slice(h, 2 * h).join(' ');
+      if (a.toLowerCase() === b.toLowerCase() && isValidSchool(a)) return a;
+    }
+    return null;
+  };
+
   let name, school;
   const commaIdx = rest.indexOf(',');
   if (commaIdx > 0) {
-    // "Last, First School..." format — use comma to anchor name/school split
     const lastName = rest.slice(0, commaIdx).trim();
     const afterComma = rest.slice(commaIdx + 1).trim();
-    const parts = afterComma.split(/\s+/).filter(Boolean);
-    // Try taking 3, 2, then 1 words from the end as the school (longest valid school wins)
-    let found = false;
-    for (let sc = Math.min(3, parts.length - 1); sc >= 1; sc--) {
-      const candidate = parts.slice(parts.length - sc).join(' ');
-      if (isValidSchool(candidate)) {
-        school = candidate;
-        name = parts.slice(0, parts.length - sc).join(' ') + ' ' + lastName;
-        found = true;
-        break;
+    const innerComma = afterComma.indexOf(',');
+
+    let firstName, schoolWords;
+    if (innerComma > 0) {
+      // Doubled name: "First LastName, First School School…"
+      const beforeInner = afterComma.slice(0, innerComma);
+      const esc = lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      firstName = beforeInner.replace(new RegExp('\\s+' + esc + '\\s*$', 'i'), '').trim();
+      const afterInner = afterComma.slice(innerComma + 1).trim();
+      const escFN = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const cleanAfterInner = afterInner.replace(new RegExp('^' + escFN + '\\s*', 'i'), '').trim();
+      schoolWords = cleanAfterInner.split(/\s+/).filter(Boolean);
+    } else {
+      // Single comma: "First School…" (school may still be doubled)
+      const parts = afterComma.split(/\s+/).filter(Boolean);
+      firstName = parts[0];
+      schoolWords = parts.slice(1);
+    }
+
+    // Try doubled school detection first, then shortest valid school
+    school = findDoubledSchool(schoolWords);
+    if (!school) {
+      for (let sc = 1; sc <= Math.min(3, schoolWords.length); sc++) {
+        const candidate = schoolWords.slice(schoolWords.length - sc).join(' ');
+        if (isValidSchool(candidate)) { school = candidate; break; }
       }
     }
-    if (!found) return null;
+    if (!school) return null;
+    name = firstName + ' ' + lastName;
   } else {
     // No comma: "First Last SCHOOL" or all-caps format — fall back to regex
     const schoolMatch = rest.match(/^(.+?)\s+([A-Z][A-Za-z0-9 &.'*\-]{1,50})$/);
