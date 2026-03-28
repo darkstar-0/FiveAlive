@@ -259,10 +259,15 @@
     <input id="aciName" class="ci-search" style="margin-bottom:10px" placeholder="Athlete name" oninput="" autocomplete="off">
     <label class="field-label">School</label>
     <input id="aciSchool" class="ci-search" style="margin-bottom:10px;font-family:'DM Mono',monospace;text-transform:uppercase" placeholder="SCHOOL" autocomplete="off">
+    <div id="aciNumRow" style="display:none;margin-bottom:10px">
+      <label class="field-label">Athlete #</label>
+      <input id="aciNum" class="ci-search" type="number" min="1" placeholder="Athlete number" autocomplete="off">
+    </div>
     <label class="field-label">Starting Height</label>
     <select id="aciStartH"></select>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeAddAthleteCi()">Cancel</button>
+      <button class="btn btn-danger" id="aciDeleteBtn" style="display:none" onclick="doDeleteAthleteCi()">Delete</button>
       <button class="btn btn-accent" id="aciSubmitBtn" onclick="doAddAthleteCi()">+ Add &amp; Check In</button>
     </div>
   </div>

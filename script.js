@@ -777,12 +777,16 @@ function openAddAthleteCi(editId) {
   const heights=E().setupHeights||setupHeights;
   const sel=document.getElementById('aciStartH');
   sel.innerHTML='<option value="">— First height —</option>'+heights.map(h=>`<option value="${h}">${h}</option>`).join('');
-  if (aciEditingId) {
+  const isEdit = !!aciEditingId;
+  document.getElementById('aciNumRow').style.display=isEdit?'block':'none';
+  document.getElementById('aciDeleteBtn').style.display=isEdit?'inline-block':'none';
+  if (isEdit) {
     const a=E().athletes.find(x=>x.id===aciEditingId);
     document.getElementById('addAthleteCiTitle').textContent='Edit Athlete';
     document.getElementById('aciSubmitBtn').textContent='Save';
     document.getElementById('aciName').value=a.name;
     document.getElementById('aciSchool').value=a.school;
+    document.getElementById('aciNum').value=a.num||'';
     if (a.startH) sel.value=a.startH;
   } else {
     document.getElementById('addAthleteCiTitle').textContent='Add Athlete';
@@ -802,6 +806,8 @@ function doAddAthleteCi() {
   if (aciEditingId) {
     const a=E().athletes.find(x=>x.id===aciEditingId);
     a.name=name; a.school=school; if(startH) a.startH=startH;
+    const numVal=parseInt(document.getElementById('aciNum').value);
+    if(!isNaN(numVal) && numVal>0) a.num=numVal;
     closeAddAthleteCi(); renderCheckinGrid(); saveState(); toast(`${name} updated ✓`);
     return;
   }
@@ -810,6 +816,12 @@ function doAddAthleteCi() {
   E().athletes.push({id,num,name,school,startH,checkedInForComp:true,notCompeting:false,checkedOut:false,withdrawn:false,eliminated:false,bestH:null,attempts:{}});
   addRow(name,school); // keep hidden athleteBody table in sync for saveSetupToState
   closeAddAthleteCi(); renderCheckinGrid(); saveState(); toast(`${name} added & checked in ✓`);
+}
+function doDeleteAthleteCi() {
+  const a=E().athletes.find(x=>x.id===aciEditingId); if(!a) return;
+  const name=a.name;
+  E().athletes=E().athletes.filter(x=>x.id!==aciEditingId);
+  closeAddAthleteCi(); renderCheckinGrid(); saveState(); toast(`${name} deleted`);
 }
 
 // ════════════════════════════════════════
