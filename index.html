@@ -247,8 +247,7 @@
       <label class="ci-toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:13px;color:var(--fg)">
         <div class="ci-toggle-wrap" style="position:relative;width:38px;height:22px;flex-shrink:0">
           <input type="checkbox" id="ciActiveToggle" checked onchange="updateCiActiveToggle()" style="opacity:0;width:0;height:0;position:absolute">
-          <span class="ci-toggle-track" style="position:absolute;inset:0;border-radius:11px;background:var(--dim);transition:background .2s;cursor:pointer"
-            onclick="this.previousElementSibling.click()"></span>
+          <span class="ci-toggle-track" style="position:absolute;inset:0;border-radius:11px;background:var(--dim);transition:background .2s;cursor:pointer"></span>
           <span class="ci-toggle-thumb" style="position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;pointer-events:none"></span>
         </div>
         <span id="ciActiveLabel">Present &amp; Active</span>
@@ -458,17 +457,27 @@
       <h3>The Check-In Screen</h3>
       <p>Before starting competition, athletes check in with the official. Tap any athlete card to check them in and record their <strong>declared starting height</strong>.</p>
       <ul>
-        <li>Athletes who don't check in are marked <em>Not Competing</em> and excluded from the rotation</li>
         <li>The starting height dropdown shows your pre-loaded heights</li>
         <li>Leave starting height blank to enter at the first height</li>
+        <li>Tap <strong>✓ Check In All</strong> to check in every athlete at once, or <strong>✗ Uncheck All</strong> to reset</li>
       </ul>
       <div class="htip">💡 Use the search box to quickly find an athlete by name or school when they walk up.</div>
-      
+
+      <h3>Present &amp; Active toggle</h3>
+      <p>The check-in modal includes a <strong>Present &amp; Active</strong> toggle (on by default). Turn it <strong>off</strong> when an athlete has checked in for the competition but is temporarily not on the infield — for example, still warming up or running another event.</p>
+      <ul>
+        <li>The athlete is registered and their starting height is recorded</li>
+        <li>Their card shows an orange <strong>CO</strong> badge on the check-in screen</li>
+        <li>When competition starts they appear in the <strong>Checked Out</strong> list, not the rotation</li>
+        <li>Check them back in from the Checked Out panel when they arrive at the pit</li>
+      </ul>
+      <div class="htip">💡 Athletes marked <em>Not Competing</em> (via the red button) are excluded entirely — use that for DNS. The Checked Out toggle is for athletes who plan to compete but aren't present yet.</div>
+
       <h3>Adding Athletes During Check-In</h3>
-      <p>If an athlete arrives who's not on the roster, tap <strong>+ Add Athlete</strong> to open the bulk add window and add them on the spot.</p>
-      
+      <p>If an athlete arrives who's not on the roster, tap <strong>+ Add Athlete</strong> to add them on the spot.</p>
+
       <h3>Starting Competition</h3>
-      <p>Tap <strong>▶ Start Competition</strong> when check-in is complete. Only checked-in athletes enter the rotation.</p>
+      <p>Tap <strong>▶ Start Competition</strong> when check-in is complete. Only checked-in athletes enter the rotation (checked-out athletes wait in the Checked Out list until they return).</p>
     </div>
     <div class="hpane" id="tab-running">
       <h3>Recording Jumps</h3>
