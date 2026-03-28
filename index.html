@@ -17,10 +17,11 @@
 <header>
   <div class="logo">Five<span>Alive</span></div>
   <div class="meet-info" style="flex:1;display:flex;gap:16px;align-items:center">
-    <input type="text" id="meetName" placeholder="Meet name" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:#e8eaf0;font-family:'DM Sans',sans-serif;font-size:14px">
-    <input type="date" id="meetDate" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:#e8eaf0;font-family:'DM Sans',sans-serif;font-size:13px;width:120px">
+    <input type="text" id="meetName" placeholder="Meet name" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px">
+    <input type="date" id="meetDate" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;width:120px">
   </div>
   <div class="hdr-btns">
+    <button class="btn btn-outline" id="themeToggle" onclick="toggleTheme()">🌙 Dark</button>
     <button class="btn btn-outline" onclick="showHelp()">? Help</button>
     <button class="btn btn-outline" onclick="safeShowSetup()">↩ Setup</button>
     <button class="btn btn-outline" id="hdrCheckin" onclick="showCheckin()" style="display:none">✓ Check-In</button>
@@ -105,6 +106,11 @@
     <div class="ci-stat"><span id="ciNoHeight">0</span>No Start Ht Declared</div>
   </div>
   <input type="text" class="ci-search" id="ciSearch" placeholder="Search by name or school…" oninput="renderCheckinGrid()">
+  <div class="ci-sort">
+    <span class="ci-sort-label">Sort:</span>
+    <button class="ci-sort-btn active" data-sort="num" onclick="setCiSort('num')"># Athlete No.</button>
+    <button class="ci-sort-btn" data-sort="name" onclick="setCiSort('name')">A–Z Name</button>
+  </div>
   <div class="checkin-grid" id="checkinGrid"></div>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <button class="btn btn-outline" onclick="checkInAll()">✓ Check In All</button>
@@ -209,7 +215,7 @@
   <div class="si">⬆ <span id="stH">—</span></div>
   <div class="si">Remaining: <span id="stR">0</span></div>
 </div>
-<div class="toast" id="toastEl"></div>
+<div class="toast" id="toastEl"><span id="toastMsg"></span><button class="toast-undo" id="toastUndoBtn" style="display:none" onclick="doUndo()">Undo</button></div>
 
 <!-- FLOATING TIMER -->
 <div class="timer-fab" id="timerFab">
@@ -293,6 +299,56 @@
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeLowerBarModal()">Cancel</button>
       <button class="btn btn-warn" onclick="doLowerBar()">← Lower Bar</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT ATTEMPTS -->
+<div class="modal-overlay" id="editAttModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-title">✏ Edit Attempts</div>
+    <div id="editAttMeta" style="font-size:13px;color:var(--dim);margin-bottom:14px"></div>
+    <div id="editAttRows" style="margin-bottom:16px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeEditAttModal()">Cancel</button>
+      <button class="btn btn-accent" onclick="saveEditAtt()">✓ Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOVE TO POSITION -->
+<div class="modal-overlay" id="mtpModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">↑ Move to Position</div>
+    <div class="modal-body" style="margin-bottom:12px">Select a slot for <strong id="mtpAthlName"></strong>:</div>
+    <div id="mtpGrid" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeMtpModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- RAISE BAR — ACTIVE JUMPERS WARNING -->
+<div class="modal-overlay" id="raiseWarnModal">
+  <div class="modal" style="max-width:420px;border:1.5px solid var(--danger)">
+    <div class="modal-title" style="color:var(--danger)">⚠ Active Jumpers Remaining</div>
+    <div class="modal-body">There are still jumpers in the rotation at <strong id="raiseWarnFrom"></strong>. Are you sure you want to raise the bar to <strong id="raiseWarnTo"></strong>?</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeRaiseWarnModal()">Cancel</button>
+      <button class="btn btn-danger" id="raiseWarnBtn" onclick="raiseBarProceed()">↑ Raise Anyway</button>
+    </div>
+  </div>
+</div>
+
+<!-- RAISE BAR — CHECKED-OUT JUMPERS -->
+<div class="modal-overlay" id="raiseCOModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">⇄ Checked-Out Jumpers</div>
+    <div class="modal-body">Select which jumpers to check back in for the current height. Those not checked in will be skipped when the bar raises.</div>
+    <div id="raiseCOList" style="margin-bottom:4px;max-height:260px;overflow-y:auto"></div>
+    <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-outline" onclick="doRaiseCOSkip()">↑ Raise Without Checking In</button>
+      <button class="btn btn-accent" onclick="doRaiseCOConfirm()">↩ Check In for Current Height</button>
     </div>
   </div>
 </div>

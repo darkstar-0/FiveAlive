@@ -602,6 +602,7 @@ function saveSetupToState() {
 //  CHECK-IN
 // ════════════════════════════════════════
 let ciEditingId = null;
+let ciSortMode = 'num'; // 'num' | 'name'
 
 function goToCheckin() {
   saveSetupToState();
@@ -614,14 +615,29 @@ function goToCheckin() {
   renderCheckinGrid();
 }
 
+function setCiSort(mode){
+  ciSortMode=mode;
+  document.querySelectorAll('.ci-sort-btn').forEach(b=>b.classList.toggle('active',b.dataset.sort===mode));
+  renderCheckinGrid();
+}
+
 function renderCheckinGrid() {
   const query=(document.getElementById('ciSearch').value||'').toLowerCase();
   const grid=document.getElementById('checkinGrid'); grid.innerHTML='';
   const athletes=E().athletes.filter(a=>!a.notCompeting||true);
 
-  const filtered = athletes.filter(a=>
-    !query || a.name.toLowerCase().includes(query) || a.school.toLowerCase().includes(query)
+  let filtered = athletes.filter(a=>
+    !query || a.name.toLowerCase().includes(query) || (a.school||'').toLowerCase().includes(query)
+      || (a.num?('#'+a.num).includes(query):false)
   );
+
+  // Sort
+  filtered = [...filtered].sort((a,b)=>{
+    if(ciSortMode==='name') return a.name.localeCompare(b.name);
+    // Sort by athlete number (numeric), athletes without a number go last
+    const na=a.num?parseInt(a.num):Infinity, nb=b.num?parseInt(b.num):Infinity;
+    return na-nb||a.name.localeCompare(b.name);
+  });
 
   filtered.forEach(a=>{
     const card=document.createElement('div');
@@ -634,6 +650,7 @@ function renderCheckinGrid() {
       <span class="ci-status ${a.notCompeting?'out':a.checkedInForComp?'in':'out'}">${a.notCompeting?'DNS':a.checkedInForComp?'IN':'—'}</span>
       <div class="ci-name">${a.name}</div>
       <div class="ci-school">${a.school}</div>
+      ${a.num?`<div class="ci-num">#${a.num}</div>`:''}
       ${a.startH?`<div class="ci-startH">enters ${a.startH}</div>`:''}
     `;
     grid.appendChild(card);
@@ -758,6 +775,27 @@ function updateRaisePreview() {
 
 function raiseBar() {
   const curN=toNorm(curH()); if(curN<0||!compRaiseVal) return;
+  const ev=E();
+  const hasActive=ev.rotation.length>0||ev.waitList.length>0;
+  if(hasActive){
+    const nextStr=normToDisplay(Math.round(curN+compRaiseVal));
+    document.getElementById('raiseWarnFrom').textContent=curH();
+    document.getElementById('raiseWarnTo').textContent=nextStr;
+    document.getElementById('raiseWarnBtn').textContent=`↑ Raise to ${nextStr} Anyway`;
+    document.getElementById('raiseWarnModal').classList.add('open');
+    return;
+  }
+  raiseBarProceed();
+}
+function closeRaiseWarnModal(){ document.getElementById('raiseWarnModal').classList.remove('open'); }
+function raiseBarProceed(){
+  closeRaiseWarnModal();
+  const co=E().athletes.filter(a=>a.checkedOut&&!a.eliminated&&!a.withdrawn);
+  if(co.length){ openRaiseCOModal(); return; }
+  doRaiseBar();
+}
+function doRaiseBar(){
+  const curN=toNorm(curH()); if(curN<0||!compRaiseVal) return;
   const nextStr=normToDisplay(Math.round(curN+compRaiseVal));
   const ev=E();
   const existIdx=ev.heights.indexOf(nextStr);
@@ -766,6 +804,26 @@ function raiseBar() {
   buildRotation(); renderAll(); toast(`Bar raised to ${nextStr}`);
   saveState();
 }
+function openRaiseCOModal(){
+  const co=E().athletes.filter(a=>a.checkedOut&&!a.eliminated&&!a.withdrawn);
+  const list=document.getElementById('raiseCOList'); list.innerHTML='';
+  co.forEach(a=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)';
+    row.innerHTML=`<input type="checkbox" id="rco_${a.id}" value="${a.id}" checked style="width:16px;height:16px;accent-color:var(--accent2);cursor:pointer;flex-shrink:0"><label for="rco_${a.id}" style="font-size:13px;cursor:pointer;flex:1">${a.num?'#'+a.num+'&nbsp;':''}${a.name}${a.school?`<span style="font-size:11px;color:var(--dim);margin-left:6px">${a.school}</span>`:''}</label>`;
+    list.appendChild(row);
+  });
+  document.getElementById('raiseCOModal').classList.add('open');
+}
+function closeRaiseCOModal(){ document.getElementById('raiseCOModal').classList.remove('open'); }
+function doRaiseCOConfirm(){
+  // Check selected athletes back in for the current height — do NOT raise the bar yet
+  document.querySelectorAll('#raiseCOList input[type="checkbox"]:checked').forEach(cb=>{
+    const a=getA(parseInt(cb.value)); if(a) checkIn(a.id);
+  });
+  closeRaiseCOModal();
+}
+function doRaiseCOSkip(){ closeRaiseCOModal(); doRaiseBar(); }
 
 function prevH(){const ev=E();if(ev.hIdx>0){ev.hIdx--;buildRotation();renderAll();saveState();}}
 function confirmLowerBar(){document.getElementById('lowerBarModal').classList.add('open');}
@@ -873,25 +931,43 @@ function record(result) {
   if(!j.attempts[h]) j.attempts[h]=[];
   const atts=j.attempts[h], carried=getCarriedMisses(j.id), attUsed=atts.length+carried;
 
+  // Snapshot full event state for undo
+  const snapshot=JSON.stringify(E());
+  const rotSnap=[...E().rotation], curSnap=E().cur, waitSnap=[...E().waitList];
+
   if(result==='O'){
     if(attUsed>=3){toast('No attempts remaining');return;}
     atts.push(result); clearCarriedMisses(j.id);
-    j.bestH=h; toast(`✓ ${j.name} cleared ${h}!`); refill(j.id);
+    j.bestH=h; refill(j.id);
+    toast(`✓ ${j.name} cleared ${h}!`, ()=>undoRecord(snapshot,rotSnap,curSnap,waitSnap));
   } else if(result==='X'){
     if(attUsed>=3){toast('No attempts remaining');return;}
     atts.push(result);
     const totalMisses=atts.filter(x=>x==='X').length+carried;
-    if(totalMisses>=3){clearCarriedMisses(j.id);j.eliminated=true;toast(`✗ ${j.name} out`);refill(j.id);}
-    else{rotateToBack();}
+    if(totalMisses>=3){clearCarriedMisses(j.id);j.eliminated=true;refill(j.id);toast(`✗ ${j.name} out`,()=>undoRecord(snapshot,rotSnap,curSnap,waitSnap));}
+    else{rotateToBack();toast(`✗ ${j.name} miss`,()=>undoRecord(snapshot,rotSnap,curSnap,waitSnap));}
   } else {
     const existMisses=atts.filter(x=>x==='X').length+carried;
     atts.push('P');
     if(existMisses>0) E().skippedMisses[j.id]=existMisses;
     else clearCarriedMisses(j.id);
     refill(j.id);
+    toast(`↷ ${j.name} passed`,()=>undoRecord(snapshot,rotSnap,curSnap,waitSnap));
   }
   renderAll();
   saveState();
+}
+function undoRecord(snapshot,rotSnap,curSnap,waitSnap){
+  const ev=E();
+  const parsed=JSON.parse(snapshot);
+  // Restore athletes array and skippedMisses from snapshot
+  ev.athletes=parsed.athletes;
+  ev.skippedMisses=parsed.skippedMisses;
+  ev.rotation=rotSnap;
+  ev.cur=curSnap;
+  ev.waitList=waitSnap;
+  renderAll();saveState();
+  toast('↩ Undone');
 }
 
 function withdrawAthlete(id){
@@ -937,6 +1013,87 @@ function toggleCO(){
   if(j.checkedOut) checkIn(j.id);
   else checkOut(j.id);
 }
+
+// Queue hamburger menu
+function openQMenu(btn,id,type){
+  // Close any open menu first
+  document.querySelectorAll('.qmenu-drop.open').forEach(d=>{
+    d.classList.remove('open');
+    d.previousElementSibling?.classList.remove('open');
+  });
+  const drop=btn.nextElementSibling; if(!drop) return;
+  const a=getA(id); if(!a) return;
+  let html='';
+  if(type==='rot'||type==='wait'||type==='ny'){
+    html+=`<div class="qmenu-item" onclick="moveToPosition(${id});closeQMenu()">↑ Move to Position</div>`;
+  }
+  if(type==='ny'){
+    html+=`<div class="qmenu-item" onclick="addToWaitList(${id});closeQMenu()">+ Add to Queue Now</div>`;
+  }
+  html+=`<div class="qmenu-item" onclick="menuCheckOut(${id});closeQMenu()">⇄ Check Out</div>`;
+  html+=`<div class="qmenu-sep"></div>`;
+  html+=`<div class="qmenu-item danger" onclick="withdrawAthlete(${id});closeQMenu()">✕ Withdraw</div>`;
+  drop.innerHTML=html;
+  drop.classList.add('open');
+  btn.classList.add('open');
+}
+function closeQMenu(){
+  document.querySelectorAll('.qmenu-drop.open').forEach(d=>d.classList.remove('open'));
+  document.querySelectorAll('.qmenu-btn.open').forEach(b=>b.classList.remove('open'));
+}
+function menuCheckOut(id){
+  const ev=E(),a=getA(id); if(!a) return;
+  if(ev.waitList.includes(id)){
+    ev.waitList.splice(ev.waitList.indexOf(id),1);
+    a.checkedOut=true;
+    toast(`${a.name} checked out`);
+    renderAll(); saveState();
+  } else {
+    checkOut(id);
+  }
+}
+let _mtpState=null;
+function moveToPosition(id){
+  const ev=E(),a=getA(id); if(!a) return;
+  const hasCur=ev.cur!==-1;
+  const inRot=ev.rotation.includes(id), inWait=ev.waitList.includes(id);
+  const inNy=!inRot&&!inWait;
+  const rotWithout=inNy?ev.rotation:ev.rotation.filter(x=>x!==id);
+  const startIdx=hasCur?ev.cur+1:0;
+  const maxPos=rotWithout.length-startIdx+1;
+  if(maxPos<=1&&!inNy){jumpASAP(id);return;}
+  if(maxPos<1){toast('No open slots');return;}
+  const slotNames=hasCur?['DECK','HOLE','HOLD','5TH']:['UP','DECK','HOLE','HOLD','5TH'];
+  _mtpState={id,inNy,hasCur,slotNames,maxPos};
+  // Build position buttons
+  const grid=document.getElementById('mtpGrid'); grid.innerHTML='';
+  for(let i=0;i<maxPos;i++){
+    const btn=document.createElement('button');
+    btn.className='mtp-pos-btn';
+    btn.innerHTML=`<span class="mtp-pos-num">${i+1}</span><span class="mtp-pos-name">${slotNames[i]||'Slot '+(i+1)}</span>`;
+    btn.onclick=()=>doMoveToPosition(i+1);
+    grid.appendChild(btn);
+  }
+  document.getElementById('mtpAthlName').textContent=`${a.num?'#'+a.num+' ':''}${a.name}`;
+  document.getElementById('mtpModal').classList.add('open');
+}
+function closeMtpModal(){ document.getElementById('mtpModal').classList.remove('open'); _mtpState=null; }
+function doMoveToPosition(pos){
+  if(!_mtpState) return;
+  const {id,inNy,hasCur,slotNames}=_mtpState;
+  closeMtpModal();
+  const ev=E(),a=getA(id); if(!a) return;
+  if(!inNy){
+    const rIdx=ev.rotation.indexOf(id);
+    if(rIdx!==-1){ev.rotation.splice(rIdx,1);if(ev.cur>rIdx)ev.cur--;}
+    else{const wIdx=ev.waitList.indexOf(id);if(wIdx!==-1)ev.waitList.splice(wIdx,1);}
+  }
+  if(inNy) a.startH=curH();
+  const insertAt=(hasCur?ev.cur+1:0)+(pos-1);
+  ev.rotation.splice(Math.min(insertAt,ev.rotation.length),0,id);
+  renderAll();saveState();
+  toast(`${a.name} → ${slotNames[pos-1]||'position '+pos}`);
+}
 function insertByBib(arr, id){
   const num=(getA(id)?.num)||Infinity;
   const idx=arr.findIndex(eid=>(getA(eid)?.num||Infinity)>num);
@@ -947,10 +1104,25 @@ function checkIn(id){
   a.checkedOut=false;
   const ev=E();
   if(!ev.rotation.includes(id)&&!ev.waitList.includes(id)){
-    if(ev.rotation.length<5) insertByBib(ev.rotation,id);
-    else insertByBib(ev.waitList,id);
+    if(!eligible(a)){
+      // Start height not yet reached — just uncheck-out; athlete reappears in notYet list
+    } else {
+      // Insert into rotation by bib, then bump the tail to waitList if over capacity
+      insertByBib(ev.rotation,id);
+      // If insertion happened at or before ev.cur, shift ev.cur forward to keep the same athlete current
+      const insertIdx=ev.rotation.indexOf(id);
+      if(ev.cur!==-1&&insertIdx<=ev.cur) ev.cur++;
+      // Trim rotation to 5, bumping highest-bib (last non-current) to front of waitList
+      while(ev.rotation.length>5){
+        let bumpIdx=ev.rotation.length-1;
+        if(bumpIdx===ev.cur) bumpIdx--;  // never bump the current jumper
+        const bumpId=ev.rotation.splice(bumpIdx,1)[0];
+        if(ev.cur>bumpIdx) ev.cur--;
+        ev.waitList.unshift(bumpId);
+      }
+    }
   }
-  if(ev.cur===-1) seekNext(false);
+  if(ev.cur===-1&&ev.rotation.length) seekNext(false);
   toast(`${a.name} checked in ✓`);
   renderAll();
   saveState();
@@ -1140,7 +1312,7 @@ function renderQueue(){
       const curAtts=curA.attempts[h]||[], curXc=curAtts.filter(x=>x==='X').length;
       const curInfo=curXc>0?'X'.repeat(curXc):'';
       const div=document.createElement('div'); div.className='qi q-cur';
-      div.innerHTML=`<span class="qbadge b-up">UP</span><span class="qname">${curA.num?'#'+curA.num+' ':''}${curA.name}</span><span style="font-size:9px;font-weight:700;color:var(--accent2);flex-shrink:0;letter-spacing:.3px">▶ NOW</span><span class="qinfo">${curInfo}</span><button class="qbtn" onclick="checkOut(${curId})">⇄ Out</button><button class="qbtn" style="margin-left:6px;color:var(--danger)" onclick="withdrawAthlete(${curId})" title="Withdraw">✕</button>`;
+      div.innerHTML=`<span class="qbadge b-up">UP</span><span class="qname">${curA.num?'#'+curA.num+' ':''}${curA.name}</span><span style="font-size:9px;font-weight:700;color:var(--accent2);flex-shrink:0;letter-spacing:.3px">▶ NOW</span><span class="qinfo">${curInfo}</span><div class="qmenu"><button class="qmenu-btn" onclick="event.stopPropagation();openQMenu(this,${curId},'cur')">≡</button><div class="qmenu-drop"></div></div>`;
       el.appendChild(div);
     }
   }
@@ -1162,7 +1334,7 @@ function renderQueue(){
     vis++;
     const info=cleared?'✓':(xc>0?'X'.repeat(xc):'')+(atts.includes('P')&&!cleared?'P':'');
     div.className=cls;
-    div.innerHTML=`<span class="qbadge ${bc}">${label}</span><span class="qname">${a.num?'#'+a.num+' ':''}${a.name}</span><span class="qinfo">${info}</span><button class="qbtn" onclick="checkOut(${id})">⇄ Out</button><button class="qbtn" style="margin-left:8px" onclick="jumpASAP(${id})">Jump ASAP</button><button class="qbtn" style="margin-left:8px;color:var(--danger)" onclick="withdrawAthlete(${id})" title="Withdraw from competition">✕</button>`;
+    div.innerHTML=`<span class="qbadge ${bc}">${label}</span><span class="qname">${a.num?'#'+a.num+' ':''}${a.name}</span><span class="qinfo">${info}</span><div class="qmenu"><button class="qmenu-btn" onclick="event.stopPropagation();openQMenu(this,${id},'rot')">≡</button><div class="qmenu-drop"></div></div>`;
     el.appendChild(div);
   });
   if(ev.waitList.length){
@@ -1173,7 +1345,7 @@ function renderQueue(){
     waitToShow.forEach(id=>{
       const a=getA(id);if(!a)return;
       const d=document.createElement('div');d.className='qi q-wait';
-      d.innerHTML=`<span class="qbadge b-wait">NEXT</span><span class="qname">${a.num?'#'+a.num+' ':''}${a.name}</span><button class="qbtn" style="margin-left:8px" onclick="jumpASAP(${id})">Jump ASAP</button><button class="qbtn" style="margin-left:8px;color:var(--danger)" onclick="withdrawAthlete(${id})" title="Withdraw">✕</button>`;
+      d.innerHTML=`<span class="qbadge b-wait">NEXT</span><span class="qname">${a.num?'#'+a.num+' ':''}${a.name}</span><div class="qmenu"><button class="qmenu-btn" onclick="event.stopPropagation();openQMenu(this,${id},'wait')">≡</button><div class="qmenu-drop"></div></div>`;
       el.appendChild(d);
     });
     if(!expandedWait && ev.waitList.length>maxShow){
@@ -1188,14 +1360,12 @@ function renderQueue(){
       el.appendChild(m);
     }
   }
-  const notYet=ev.athletes.filter(a=>!a.eliminated&&!a.notCompeting&&a.checkedInForComp&&a.startH&&toNorm(h)<toNorm(a.startH)&&!ev.rotation.includes(a.id)&&!ev.waitList.includes(a.id));
+  const notYet=ev.athletes.filter(a=>!a.eliminated&&!a.notCompeting&&a.checkedInForComp&&!a.checkedOut&&a.startH&&toNorm(h)<toNorm(a.startH)&&!ev.rotation.includes(a.id)&&!ev.waitList.includes(a.id));
   if(notYet.length){
     const s=document.createElement('div');s.className='qsec';s.textContent='Entering at higher height';el.appendChild(s);
     notYet.forEach(a=>{
       const d=document.createElement('div');d.className='qi q-ny';
-      d.innerHTML=`<span class="qbadge b-ny">WAIT</span><span class="qname">${a.num?'#'+a.num+' ':''}${a.name}</span><span class="qinfo">enters ${a.startH}</span>`+
-        `<button class="qbtn" style="margin-left:8px" onclick="addToWaitList(${a.id})">+ Add to Waitlist</button>`+
-        `<button class="qbtn" style="margin-left:8px;color:var(--danger)" onclick="withdrawAthlete(${a.id})" title="Withdraw">✕</button>`;
+      d.innerHTML=`<span class="qbadge b-ny">WAIT</span><span class="qname">${a.num?'#'+a.num+' ':''}${a.name}</span><span class="qinfo">enters ${a.startH}</span><div class="qmenu"><button class="qmenu-btn" onclick="event.stopPropagation();openQMenu(this,${a.id},'ny')">≡</button><div class="qmenu-drop"></div></div>`;
       el.appendChild(d);
     });
   }
@@ -1256,12 +1426,84 @@ function renderBoard(){
     const atH=hs.map(h=>{
       const at=a.attempts[h]||[];
       if(a.startH&&toNorm(a.startH)>toNorm(h)) return `<td><div class="achips"><span class="ac ac-s">P</span></div></td>`;
-      if(!at.length) return `<td><div class="achips"><span class="ac" style="opacity:.2">—</span></div></td>`;
-      return `<td><div class="achips">${at.map(x=>`<span class="ac ac-${x==='O'?'o':x==='X'?'x':'p'}">${x}</span>`).join('')}</div></td>`;
+      const chips=at.length
+        ? at.map(x=>`<span class="ac ac-${x==='O'?'o':x==='X'?'x':'p'}">${x}</span>`).join('')
+        : `<span class="ac" style="opacity:.2">—</span>`;
+      return `<td class="editable" data-aid="${a.id}" data-h="${h.replace(/"/g,'&quot;')}" onclick="openEditAttModal(parseInt(this.dataset.aid),this.dataset.h)" title="Edit at ${h}"><div class="achips">${chips}</div></td>`;
     }).join('');
     tr.innerHTML=`<td><span class="pnum ${pCls}">${a.eliminated?i+1:'—'}</span></td><td>${a.num||''}</td><td><strong>${a.name}</strong>${a.checkedOut?'<span class="co-pill" style="font-size:8px">OUT</span>':''}${a.withdrawn?'<span style="font-size:10px;color:var(--danger);margin-left:5px">WD</span>':''}</td><td style="font-size:11px;color:var(--dim);font-family:'DM Mono',monospace">${a.school}</td><td class="bh" style="color:var(--dim)">${a.startH||'—'}</td><td class="bh">${a.bestH||'NH'}</td>${atH}`;
     body.appendChild(tr);
   });
+}
+
+// ════════════════════════════════════════
+//  EDIT ATTEMPTS (scoreboard)
+// ════════════════════════════════════════
+let _editAtt={athleteId:null,height:null};
+function openEditAttModal(athleteId,height){
+  const a=getA(athleteId); if(!a) return;
+  _editAtt={athleteId,height};
+  document.getElementById('editAttMeta').innerHTML=
+    `<strong>${a.num?'#'+a.num+' ':''}${a.name}</strong> &nbsp;·&nbsp; ${height}`;
+  const atts=[...(a.attempts[height]||[])];
+  const rows=document.getElementById('editAttRows'); rows.innerHTML='';
+  // Show up to 3 attempt slots
+  for(let i=0;i<3;i++){
+    const row=document.createElement('div');
+    row.className='edit-att-row';
+    const cur=atts[i]||null;
+    row.innerHTML=`<span class="edit-att-label">Attempt ${i+1}</span><div class="edit-att-chips">
+      <button class="edit-att-chip${cur==='O'?' sel-o':''}" data-att="${i}" data-val="O" onclick="toggleEditChip(this)">✓</button>
+      <button class="edit-att-chip${cur==='X'?' sel-x':''}" data-att="${i}" data-val="X" onclick="toggleEditChip(this)">✗</button>
+      <button class="edit-att-chip${cur==='P'?' sel-p':''}" data-att="${i}" data-val="P" onclick="toggleEditChip(this)">P</button>
+      <button class="edit-att-chip" data-att="${i}" data-val="" onclick="toggleEditChip(this)" title="Clear" style="font-size:10px;color:var(--dim)">—</button>
+    </div>`;
+    rows.appendChild(row);
+  }
+  document.getElementById('editAttModal').classList.add('open');
+}
+function toggleEditChip(btn){
+  // Deselect all chips in the same attempt row, select this one
+  btn.closest('.edit-att-chips').querySelectorAll('.edit-att-chip').forEach(b=>{
+    b.classList.remove('sel-o','sel-x','sel-p');
+  });
+  const val=btn.dataset.val;
+  if(val==='O') btn.classList.add('sel-o');
+  else if(val==='X') btn.classList.add('sel-x');
+  else if(val==='P') btn.classList.add('sel-p');
+}
+function closeEditAttModal(){ document.getElementById('editAttModal').classList.remove('open'); }
+function saveEditAtt(){
+  const {athleteId,height}=_editAtt;
+  const a=getA(athleteId); if(!a) return;
+  // Read selected chips
+  const newAtts=[];
+  document.querySelectorAll('#editAttRows .edit-att-row').forEach(row=>{
+    const sel=row.querySelector('.edit-att-chip.sel-o,.edit-att-chip.sel-x,.edit-att-chip.sel-p');
+    if(sel) newAtts.push(sel.dataset.val);
+  });
+  // Trim trailing blanks (gaps mid-sequence aren't valid, so truncate at first blank)
+  const trimmed=[];
+  for(const v of newAtts){ if(!v) break; trimmed.push(v); }
+  a.attempts[height]=trimmed;
+  // Recalculate bestH
+  a.bestH=null;
+  for(const h of E().heights){ if((a.attempts[h]||[]).includes('O')) a.bestH=h; }
+  // Recalculate eliminated: 3 total misses at any height with carried misses
+  const carried=getCarriedMisses(athleteId);
+  const xCount=trimmed.filter(x=>x==='X').length;
+  if(xCount+carried<3) a.eliminated=false;
+  // If no longer eliminated and not in rotation/waitList, add back
+  if(!a.eliminated&&!a.checkedOut){
+    const ev=E();
+    if(!ev.rotation.includes(athleteId)&&!ev.waitList.includes(athleteId)){
+      if(ev.rotation.length<5) insertByBib(ev.rotation,athleteId);
+      else insertByBib(ev.waitList,athleteId);
+    }
+  }
+  closeEditAttModal();
+  renderAll(); saveState();
+  toast(`✏ ${a.name} updated`);
 }
 
 // ════════════════════════════════════════
@@ -1386,7 +1628,29 @@ function switchTab(id){
   document.querySelectorAll('.htab').forEach(t=>{if(t.getAttribute('onclick')===`switchTab('${id}')`)t.classList.add('active');});
 }
 
-function toast(msg){const t=document.getElementById('toastEl');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+let _toastTimer=null;
+let _undoState=null;
+function toast(msg,undoFn){
+  if(_toastTimer) clearTimeout(_toastTimer);
+  const t=document.getElementById('toastEl');
+  const msgEl=document.getElementById('toastMsg');
+  const undoBtn=document.getElementById('toastUndoBtn');
+  msgEl.textContent=msg;
+  if(undoFn){
+    _undoState=undoFn;
+    undoBtn.style.display='';
+  } else {
+    _undoState=null;
+    undoBtn.style.display='none';
+  }
+  t.classList.add('show');
+  _toastTimer=setTimeout(()=>{t.classList.remove('show');_undoState=null;},undoFn?5000:2600);
+}
+function doUndo(){
+  if(_toastTimer) clearTimeout(_toastTimer);
+  document.getElementById('toastEl').classList.remove('show');
+  if(_undoState){_undoState();_undoState=null;}
+}
 
 // ════════════════════════════════════════
 //  SETUP LAYOUT & STATE MANAGEMENT
@@ -1542,6 +1806,12 @@ function loadState(){
   }catch(e){console.error('Failed to load state:',e);return false;}
 }
 
+function toggleTheme(){
+  const isDark=document.body.classList.toggle('dark');
+  localStorage.setItem('fiveAlive_theme',isDark?'dark':'light');
+  document.getElementById('themeToggle').textContent=isDark?'☀ Light':'🌙 Dark';
+}
+
 function clearStoredData(){
   if(!confirm('Clear all data and reset the app? This will delete all athletes, jump records, meet info, and saved settings.')){
     return;
@@ -1596,6 +1866,12 @@ function updateImportResultMessage(){
 // ── INIT ──
 buildIncChips(); buildRaiseChips();
 
+// Restore theme preference (default: light)
+(function(){
+  const t=localStorage.getItem('fiveAlive_theme');
+  if(t==='dark'){document.body.classList.add('dark');document.getElementById('themeToggle').textContent='☀ Light';}
+})();
+
 console.log('Initializing app - checking for saved state');
 const stateLoaded = loadState();
 console.log('State loaded:', stateLoaded);
@@ -1620,3 +1896,8 @@ document.getElementById('importResult').style.display='block';
 updateImportResultMessage();
 restorePerGenderHeights();
 showSetup();
+
+// Close queue hamburger menus when clicking outside
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.qmenu')) closeQMenu();
+});
